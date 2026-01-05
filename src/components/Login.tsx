@@ -3,6 +3,7 @@ import { User } from '../types';
 import { getUsers, setCurrentUser } from '../utils/storage';
 import { seedDemoData, hasDemoData } from '../utils/seedData';
 import { LogIn, User as UserIcon, Lock } from 'lucide-react';
+import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -41,11 +42,11 @@ export function Login({ onLogin }: LoginProps) {
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 to-orange-600" />
         
         <div className="text-center mb-10">
-          <div className="w-20 h-20 bg-orange-500 rounded-2xl flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-orange-200 rotate-3 transition-transform hover:rotate-0">
+          <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-orange-200 rotate-3 transition-transform hover:rotate-0 border-2 border-orange-100">
              <img 
-                src="https://cdn.discordapp.com/attachments/906608190219755631/1452947801762955306/303410614_407072674865676_8245980228075636848_n.png?ex=694baa96&is=694a5916&hm=f008c35a0e68c5186426577fe1bcf24b986e3dc54bd74a450f1e4f1f3583905d&" 
+                src={logo}
                 alt="Logo" 
-                className="w-14 h-14 object-contain invert mix-blend-multiply opacity-80"
+                className="w-16 h-16 object-contain"
               />
           </div>
           <h1 className="text-3xl font-bold text-slate-800 mb-2">ยินดีต้อนรับกลับ</h1>

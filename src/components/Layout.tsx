@@ -13,9 +13,11 @@ import {
   Bell,
   MessageSquare,
   Menu,
-  ChevronRight
+  ChevronRight,
+  Package
 } from 'lucide-react';
 import { QuickGuide } from './QuickGuide';
+import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
 
 interface LayoutProps {
   children: ReactNode;
@@ -34,6 +36,7 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
     { id: 'frontdesk', label: 'เคาน์เตอร์', icon: DoorOpen, roles: ['front-desk', 'management'] },
     { id: 'rooms', label: 'สถานะห้องพัก', icon: Bed, roles: ['front-desk', 'housekeeping', 'management'] },
     { id: 'housekeeping', label: 'แม่บ้าน', icon: Wrench, roles: ['housekeeping', 'management'] },
+    { id: 'inventory', label: 'คลังพัสดุ', icon: Package, roles: ['management', 'housekeeping', 'front-desk'] },
     { id: 'reports', label: 'รายงาน', icon: BarChart3, roles: ['management', 'board'] },
   ];
 
@@ -50,11 +53,11 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
         {/* Logo Section */}
         <div className="h-20 flex items-center px-6 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white border border-slate-100 rounded-xl flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+            <div className="w-10 h-10 bg-white border border-slate-100 rounded-xl flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-1">
               <img 
-                src="https://cdn.discordapp.com/attachments/906608190219755631/1452947801762955306/303410614_407072674865676_8245980228075636848_n.png?ex=694cfc16&is=694baa96&hm=9107d4c13a20cf11b655c1155f67a4e65d1c317bfae72a3c5c42816b6103635c&" 
+                src={logo}
                 alt="Logo" 
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             </div>
             {sidebarOpen && (

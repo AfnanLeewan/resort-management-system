@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Room, User, Booking, Payment } from '../types';
-import { getRooms, getBookings, addBooking, updateRoomStatus, addPayment, getNextReceiptNumber, getNextInvoiceNumber } from '../utils/storage';
+import { Room, User, Booking } from '../types';
+import { getRooms, getBookings, addBooking, updateRoomStatus } from '../utils/storage';
 import { 
   Bed, 
   BedDouble, 
@@ -23,23 +23,18 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
-  Printer,
   MessageCircle,
   Smartphone,
-  ArrowLeft,
-  Waves
+  ArrowLeft
 } from 'lucide-react';
 import { formatCurrency, formatDate, getTodayDateString } from '../utils/dateHelpers';
 import { PRICING } from '../utils/pricing';
 import { Calendar } from './ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { CheckInModal } from './CheckInModal';
-import { CheckOutModal } from './CheckOutModal';
 import { format, addDays, isSameDay, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { cn } from './ui/utils';
 import { buttonVariants } from './ui/button';
-import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
 
 interface RoomGridProps {
   currentUser?: User;
@@ -56,11 +51,6 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [showPoolModal, setShowPoolModal] = useState(false);
-  const [showCheckInModal, setShowCheckInModal] = useState(false);
-  const [showCheckOutModal, setShowCheckOutModal] = useState(false);
-  const [selectedBookingForCheckIn, setSelectedBookingForCheckIn] = useState<Booking | null>(null);
-  const [selectedBookingForCheckOut, setSelectedBookingForCheckOut] = useState<Booking | null>(null);
 
   // Load data
   useEffect(() => {
@@ -91,9 +81,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
     );
 
     if (booking) {
-        // If checked in, show as occupied (Green)
-        if (booking.status === 'checked-in') return 'occupied';
-        // If checking in on this date (and not checked in yet)
+        // If checking in on this date
         if (booking.checkInDate === dateStr) return 'reserved';
         // If staying over (already checked in or reserved previous days)
         return 'occupied';
@@ -165,7 +153,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
     switch (status) {
       case 'available': return 'bg-white border-slate-200 text-slate-700 hover:border-orange-300 hover:bg-orange-50';
       case 'reserved': return 'bg-blue-100 border-blue-200 text-blue-700 hover:bg-blue-200';
-      case 'occupied': return 'bg-green-600 border-green-600 text-white hover:bg-green-700';
+      case 'occupied': return 'bg-slate-800 border-slate-800 text-white hover:bg-slate-700';
       case 'cleaning': return 'bg-orange-100 border-orange-200 text-orange-800 hover:bg-orange-200';
       case 'maintenance': return 'bg-red-50 border-red-200 text-red-800 hover:bg-red-100';
       default: return 'bg-white border-slate-200 text-slate-700';
@@ -300,11 +288,11 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
             subtext="New Arrivals"
             />
             <StatCard 
-            label="พักค้างคืน/เช็คอินแล้ว" 
+            label="พักค้างคืน" 
             value={stats.occupied} 
             icon={Users} 
-            color="bg-green-600" 
-            subtext="Occupied / Checked In"
+            color="bg-slate-800" 
+            subtext="Occupied / Stay Over"
             />
             <StatCard 
             label="ปรับปรุง/ทำความสะอาด" 
@@ -347,7 +335,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
               <div className="flex gap-4 text-xs font-medium">
                 <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-white border border-slate-300"></span> ว่าง</div>
                 <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-blue-100 border border-blue-300"></span> จองเข้าพัก (Arrival)</div>
-                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-600"></span> เช็คอินแล้ว/ไม่ว่าง</div>
+                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-slate-800"></span> ไม่ว่าง/ค้างคืน</div>
                 <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-100 border border-orange-300"></span> ปิดปรับปรุง</div>
               </div>
             </div>
@@ -381,11 +369,11 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                                         <div className={`px-4 py-1.5 rounded-full text-sm font-bold ${
                                         effectiveStatus === 'available' ? 'bg-green-100 text-green-700' :
                                         effectiveStatus === 'reserved' ? 'bg-blue-100 text-blue-700' :
-                                        effectiveStatus === 'occupied' ? 'bg-green-600 text-white' : 'bg-orange-100 text-orange-700'
+                                        effectiveStatus === 'occupied' ? 'bg-slate-800 text-white' : 'bg-orange-100 text-orange-700'
                                         }`}>
                                         {effectiveStatus === 'available' ? 'ว่าง' :
                                         effectiveStatus === 'reserved' ? 'จองเข้าพัก (Arrival)' :
-                                        effectiveStatus === 'occupied' ? 'เช็คอินแล้ว/ไม่ว่าง' : 
+                                        effectiveStatus === 'occupied' ? 'ไม่ว่าง/ค้างคืน' : 
                                         effectiveStatus === 'cleaning' ? 'กำลังทำความสะอาด' : 'ปิดปรับปรุง'}
                                         </div>
                                     );
@@ -444,17 +432,16 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
 
                                 if (booking) {
                                     const isArrival = booking.checkInDate === selectedDateStr;
-                                    const isCheckedIn = booking.status === 'checked-in';
                                     
                                     return (
-                                       <div className={`p-8 rounded-3xl border ${isArrival && !isCheckedIn ? 'bg-blue-50 border-blue-100' : 'bg-slate-50 border-slate-200'}`}>
+                                       <div className={`p-8 rounded-3xl border ${isArrival ? 'bg-blue-50 border-blue-100' : 'bg-slate-50 border-slate-200'}`}>
                                           <div className="flex items-center gap-6 mb-8">
-                                             <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold ${isArrival && !isCheckedIn ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                                             <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold ${isArrival ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
                                                 {booking.guest.name.charAt(0)}
                                              </div>
                                              <div>
-                                                <div className={`text-sm font-bold uppercase tracking-wider mb-1 ${isArrival && !isCheckedIn ? 'text-blue-400' : 'text-slate-400'}`}>
-                                                    {isArrival && !isCheckedIn ? 'Arrival (รอเช็คอิน)' : isCheckedIn ? 'Checked In (เข้าพักแล้ว)' : 'Stay Over (ค้างคืน)'}
+                                                <div className={`text-sm font-bold uppercase tracking-wider mb-1 ${isArrival ? 'text-blue-400' : 'text-slate-400'}`}>
+                                                    {isArrival ? 'Arrival (เข้าพักวันนี้)' : 'Stay Over (ค้างคืน)'}
                                                 </div>
                                                 <div className="text-2xl font-bold text-slate-800">{booking.guest.name}</div>
                                                 <div className="text-slate-500">{booking.guest.phone}</div>
@@ -470,7 +457,6 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                                              <div className="bg-white p-4 rounded-xl border border-slate-100">
                                                 <div className="text-slate-400 text-sm mb-1">เช็คอิน</div>
                                                 <div className="text-xl font-bold text-slate-700">{formatDate(booking.checkInDate)}</div>
-                                                {booking.actualCheckInTime && <div className="text-xs text-green-600 font-bold mt-1">เวลา: {format(parseISO(booking.actualCheckInTime), 'HH:mm')}</div>}
                                              </div>
                                              <div className="bg-white p-4 rounded-xl border border-slate-100">
                                                 <div className="text-slate-400 text-sm mb-1">เช็คเอาท์</div>
@@ -480,46 +466,11 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
 
                                           {isToday && (
                                               <div className="flex gap-4">
-                                                 {/* Check In Button for Arrivals */}
-                                                 {isArrival && !isCheckedIn && (
-                                                    <button 
-                                                        onClick={() => {
-                                                            setSelectedBookingForCheckIn(booking);
-                                                            setShowCheckInModal(true);
-                                                        }}
-                                                        className="flex-1 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2"
-                                                    >
-                                                        <LogIn className="w-5 h-5" />
-                                                        เช็คอิน
-                                                    </button>
-                                                 )}
-                                                 
-                                                 {(!isArrival || isCheckedIn) && (
-                                                     <div className="flex-1 flex gap-2">
-                                                         <button 
-                                                            onClick={() => {
-                                                                setSelectedBookingForCheckOut(booking);
-                                                                setShowCheckOutModal(true);
-                                                            }}
-                                                            className="flex-1 py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold transition-all shadow-lg shadow-slate-200"
-                                                         >
-                                                            ดูบิล / ชำระเงิน
-                                                         </button>
-                                                         <button
-                                                             onClick={() => {
-                                                                setSelectedBookingForCheckOut(booking);
-                                                                setShowCheckOutModal(true);
-                                                            }} 
-                                                             className="px-4 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold transition-all border border-slate-200"
-                                                             title="Download Receipt"
-                                                         >
-                                                             <Printer className="w-6 h-6" />
-                                                         </button>
-                                                     </div>
-                                                 )}
-
-                                                 {/* Allow checkout only if occupied/checked-in/stayover */}
-                                                 {(status === 'occupied' || isCheckedIn) && (
+                                                 <button className="flex-1 py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold transition-all shadow-lg shadow-slate-200">
+                                                    ดูบิล / ชำระเงิน
+                                                 </button>
+                                                 {/* Allow checkout only if occupied */}
+                                                 {status === 'occupied' && (
                                                      <button 
                                                         onClick={() => { updateRoomStatus(singleSelectedRoom.id, 'cleaning'); setRooms(getRooms()); }}
                                                         className="flex-1 py-4 bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 rounded-xl font-bold transition-all"
@@ -613,7 +564,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                   // EMPTY STATE
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center opacity-40 hover:opacity-50 transition-opacity">
                     <img 
-                      src={logo}
+                      src="https://cdn.discordapp.com/attachments/906608190219755631/1452947801762955306/303410614_407072674865676_8245980228075636848_n.png?ex=694cfc16&is=694baa96&hm=9107d4c13a20cf11b655c1155f67a4e65d1c317bfae72a3c5c42816b6103635c&" 
                       className="w-48 h-48 object-contain mx-auto mb-6 grayscale opacity-50"
                       alt="Watermark"
                     />
@@ -622,26 +573,6 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                   </div>
                 )}
               </div>
-
-              {/* Pool Service Button */}
-              <button 
-                onClick={() => setShowPoolModal(true)}
-                className="w-full bg-cyan-500 hover:bg-cyan-600 text-white p-4 rounded-3xl shadow-lg shadow-cyan-100 flex items-center justify-between transition-all group active:scale-95"
-              >
-                  <div className="flex items-center gap-4">
-                      <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
-                          <Waves className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="text-left">
-                          <h4 className="text-lg font-bold">ใช้บริการสระว่ายน้ำ</h4>
-                          <p className="text-cyan-100 text-sm">Swimming Pool Service</p>
-                      </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                      <span className="text-lg font-bold bg-white/20 px-3 py-1 rounded-lg">฿50 / ท่าน</span>
-                      <ChevronRight className="w-6 h-6 text-white/50 group-hover:text-white group-hover:translate-x-1 transition-all" />
-                  </div>
-              </button>
 
               {/* Bottom Wing (RB) */}
               <div className="relative pt-6 shrink-0">
@@ -683,49 +614,6 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
           }}
         />
       )}
-
-      {/* Pool Service Modal */}
-      {showPoolModal && (
-          <PoolServiceModal 
-            onClose={() => setShowPoolModal(false)}
-            currentUser={currentUser}
-            onSuccess={() => {
-                setShowPoolModal(false);
-                setBookings(getBookings()); // Refresh bookings/income
-                alert('บันทึกรายรับเรียบร้อย / Payment recorded');
-            }}
-          />
-      )}
-
-      {/* Check In Modal */}
-      {showCheckInModal && selectedBookingForCheckIn && currentUser && (
-        <CheckInModal 
-          booking={selectedBookingForCheckIn}
-          onClose={() => setShowCheckInModal(false)}
-          currentUser={currentUser}
-          onComplete={() => {
-            setShowCheckInModal(false);
-            setBookings(getBookings());
-            setRooms(getRooms());
-            setSelectedBookingForCheckIn(null);
-          }}
-        />
-      )}
-
-      {/* Check Out Modal (Bill/Payment) */}
-      {showCheckOutModal && selectedBookingForCheckOut && currentUser && (
-          <CheckOutModal 
-             booking={selectedBookingForCheckOut}
-             onClose={() => setShowCheckOutModal(false)}
-             currentUser={currentUser}
-             onComplete={() => {
-                setShowCheckOutModal(false);
-                setBookings(getBookings());
-                setRooms(getRooms());
-                setSelectedBookingForCheckOut(null);
-             }}
-          />
-      )}
     </div>
   );
 }
@@ -751,138 +639,6 @@ function StatCard({ label, value, icon: Icon, color, subtext }: any) {
   );
 }
 
-function PoolServiceModal({ onClose, onSuccess, currentUser }: any) {
-    const [guestName, setGuestName] = useState('');
-    const [count, setCount] = useState(1);
-    const pricePerPerson = 50;
-    const total = count * pricePerPerson;
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if(!guestName) return;
-
-        // 1. Create a "Service Booking" to track the transaction context
-        const bookingId = `POOL-${Date.now()}`;
-        const booking: Booking = {
-            id: bookingId,
-            roomIds: [], // No rooms involved
-            guest: { name: guestName, phone: '-', idNumber: '-' },
-            checkInDate: getTodayDateString(),
-            checkOutDate: getTodayDateString(),
-            pricingTier: 'general',
-            baseRate: total,
-            source: 'walk-in',
-            status: 'checked-out', // Service completed immediately upon payment
-            groupName: count > 1 ? `Pool Group (${count})` : undefined,
-            notes: `Pool Service: ${count} person(s)`,
-            createdAt: new Date().toISOString(),
-            createdBy: currentUser?.id || 'system'
-        };
-        addBooking(booking);
-
-        // 2. Create the Payment Record
-        const payment: Payment = {
-            id: `PAY-${Date.now()}`,
-            bookingId: bookingId,
-            amount: total,
-            method: 'cash',
-            receiptNumber: getNextReceiptNumber(),
-            invoiceNumber: getNextInvoiceNumber(),
-            paidAt: new Date().toISOString(),
-            paidBy: currentUser?.name || 'Staff',
-            charges: [
-                {
-                    id: `CHG-${Date.now()}`,
-                    bookingId: bookingId,
-                    type: 'other',
-                    description: `ค่าบริการสระว่ายน้ำ (${count} ท่าน)`,
-                    amount: total
-                }
-            ],
-            subtotal: total,
-            vat: 0,
-            total: total
-        };
-        addPayment(payment);
-
-        onSuccess();
-    };
-
-    return (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
-                <div className="flex justify-between items-center mb-6">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-cyan-100 text-cyan-600 rounded-xl">
-                            <Waves className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-bold text-slate-800">บริการสระว่ายน้ำ</h3>
-                            <p className="text-slate-500 text-sm">Swimming Pool Service</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
-                        <X className="w-6 h-6" />
-                    </button>
-                </div>
-
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">ชื่อผู้ใช้บริการ (Guest Name)</label>
-                        <input 
-                            required
-                            autoFocus
-                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none font-bold text-lg text-slate-800"
-                            value={guestName}
-                            onChange={e => setGuestName(e.target.value)}
-                            placeholder="ระบุชื่อลูกค้า..."
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">จำนวนผู้ใช้บริการ (ท่าน)</label>
-                        <div className="flex items-center gap-4">
-                            <button 
-                                type="button"
-                                onClick={() => setCount(Math.max(1, count - 1))}
-                                className="w-12 h-12 flex items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xl transition-colors"
-                            >
-                                -
-                            </button>
-                            <div className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-xl text-center font-bold text-xl text-slate-800">
-                                {count}
-                            </div>
-                            <button 
-                                type="button"
-                                onClick={() => setCount(count + 1)}
-                                className="w-12 h-12 flex items-center justify-center rounded-xl bg-cyan-500 text-white hover:bg-cyan-600 font-bold text-xl transition-colors shadow-lg shadow-cyan-200"
-                            >
-                                +
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
-                        <div className="flex justify-between text-slate-500 text-sm">
-                            <span>ราคาต่อท่าน</span>
-                            <span>{pricePerPerson} บาท</span>
-                        </div>
-                        <div className="flex justify-between text-slate-800 font-bold text-lg pt-2 border-t border-slate-200">
-                            <span>ยอดรวมสุทธิ</span>
-                            <span className="text-cyan-600">{formatCurrency(total)}</span>
-                        </div>
-                    </div>
-
-                    <button type="submit" className="w-full py-4 bg-cyan-600 hover:bg-cyan-700 text-white rounded-2xl font-bold text-lg shadow-lg shadow-cyan-200 transition-all active:scale-95 flex items-center justify-center gap-2">
-                        <Check className="w-6 h-6" />
-                        ยืนยันและรับเงิน
-                    </button>
-                </form>
-            </div>
-        </div>
-    );
-}
-
 function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: any) {
   const [formData, setFormData] = useState({
     guestName: '',
@@ -894,7 +650,8 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
     checkOutDate: '',
   });
 
-  const [activeDateField, setActiveDateField] = useState<'checkIn' | 'checkOut' | null>(null);
+  // New State for "Embedded" Calendar View
+  const [selectingDateFor, setSelectingDateFor] = useState<'checkIn' | 'checkOut' | null>(null);
 
   const isGroup = rooms.length > 1;
   const label = isGroup ? `${rooms.length} ห้อง: ${rooms.map((r: any) => r.label).join(', ')}` : rooms[0].label;
@@ -926,220 +683,221 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
     onSuccess();
   };
 
-  const handleDateSelect = (field: 'checkInDate' | 'checkOutDate', date: Date | undefined) => {
-    if (!date) return;
+  const handleDateSelect = (date: Date | undefined) => {
+    if (!date || !selectingDateFor) return;
+    
     setFormData(prev => ({
       ...prev,
-      [field]: format(date, 'yyyy-MM-dd')
+      [selectingDateFor === 'checkIn' ? 'checkInDate' : 'checkOutDate']: format(date, 'yyyy-MM-dd')
     }));
-    
-    // Auto-flow logic
-    if (field === 'checkInDate') {
-        // If we picked check-in, automatically open check-out next
-        setActiveDateField('checkOut');
-    } else {
-        // If we picked check-out, close the calendar
-        setActiveDateField(null);
-    }
+    setSelectingDateFor(null); // Return to form
   };
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl w-full max-w-lg p-8 shadow-2xl scale-100 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h3 className="text-2xl font-bold text-slate-800">
-              {isGroup ? 'สร้างการจองใหม่ (กลุ่ม)' : 'สร้างการจองใหม่'}
-            </h3>
-            <p className="text-slate-500 text-sm mt-1 max-h-20 overflow-y-auto">{label}</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-4">
-             {isGroup && (
-               <div className="bg-orange-50 border border-orange-100 p-4 rounded-xl">
-                  <label className="block text-xs font-bold text-orange-800 uppercase tracking-wider mb-2">ชื่อคณะทัวร์ / กลุ่ม (Group Name)</label>
-                  <input 
-                    className="w-full p-3 bg-white border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
-                    value={formData.groupName}
-                    onChange={e => setFormData({...formData, groupName: e.target.value})}
-                    placeholder="เช่น คณะทัวร์คุณสมหญิง"
-                  />
-               </div>
-             )}
-
-             <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">ชื่อผู้จอง / หัวหน้าทัวร์</label>
-                <div className="relative">
-                    <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input 
-                    required
-                    className="w-full p-4 pl-12 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
-                    value={formData.guestName}
-                    onChange={e => setFormData({...formData, guestName: e.target.value})}
-                    placeholder="เช่น สมชาย ใจดี"
-                    />
+      <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl scale-100 animate-in zoom-in-95 duration-200 overflow-hidden flex flex-col max-h-[90vh]">
+        
+        {/* CALENDAR VIEW MODE */}
+        {selectingDateFor ? (
+          <div className="flex flex-col h-full animate-in slide-in-from-right duration-300">
+             <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50">
+                <button 
+                  onClick={() => setSelectingDateFor(null)}
+                  className="p-2 -ml-2 hover:bg-white rounded-full text-slate-500 transition-all"
+                >
+                  <ArrowLeft className="w-6 h-6" />
+                </button>
+                <div>
+                   <h3 className="text-lg font-bold text-slate-800">
+                      {selectingDateFor === 'checkIn' ? 'เลือกวันเช็คอิน' : 'เลือกวันเช็คเอาท์'}
+                   </h3>
+                   <p className="text-sm text-slate-500">เลือกวันที่จากปฏิทิน</p>
                 </div>
              </div>
              
-             <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">เลขบัตรประชาชน / Passport</label>
-                <div className="relative">
-                    <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input 
-                    className="w-full p-4 pl-12 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
-                    value={formData.idNumber}
-                    onChange={e => setFormData({...formData, idNumber: e.target.value})}
-                    placeholder="เลขบัตรประชาชน 13 หลัก หรือ Passport No."
-                    />
-                </div>
-             </div>
-
-             <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">เบอร์โทรศัพท์</label>
-                    <div className="relative">
-                        <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input 
-                        required
-                        type="tel"
-                        className="w-full p-4 pl-10 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
-                        value={formData.phone}
-                        onChange={e => setFormData({...formData, phone: e.target.value})}
-                        placeholder="08x-xxx-xxxx"
-                        />
-                    </div>
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">WhatsApp (ต่างชาติ)</label>
-                    <div className="relative">
-                        <MessageCircle className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
-                        <input 
-                        type="text"
-                        className="w-full p-4 pl-10 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
-                        value={formData.whatsapp}
-                        onChange={e => setFormData({...formData, whatsapp: e.target.value})}
-                        placeholder="+66..."
-                        />
-                    </div>
-                </div>
-             </div>
-
-             <div className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <label className="block text-lg font-bold text-slate-700 mb-2">วันเช็คอิน <span className="text-red-500">*</span></label>
-                    <button
-                      type="button"
-                      onClick={() => setActiveDateField(activeDateField === 'checkIn' ? null : 'checkIn')}
-                      className={cn(
-                        "w-full flex items-center gap-2 p-4 bg-slate-50 border rounded-xl hover:bg-slate-100 transition-all text-left font-normal text-lg h-16",
-                        !formData.checkInDate && "text-slate-400",
-                        activeDateField === 'checkIn' ? "border-orange-500 ring-2 ring-orange-500/20 bg-orange-50" : "border-slate-200"
-                      )}
-                    >
-                      <CalendarIcon className={cn("w-5 h-5", activeDateField === 'checkIn' ? "text-orange-500" : "text-slate-500")} />
-                      {formData.checkInDate ? (
-                        <span className="text-slate-700">{format(parseISO(formData.checkInDate), "d MMMM yyyy", { locale: th })}</span>
-                      ) : (
-                        <span>เลือกวันที่</span>
-                      )}
-                    </button>
-                 </div>
-                 <div>
-                    <label className="block text-lg font-bold text-slate-700 mb-2">วันเช็คเอาท์ <span className="text-red-500">*</span></label>
-                    <button
-                      type="button"
-                      onClick={() => setActiveDateField(activeDateField === 'checkOut' ? null : 'checkOut')}
-                      className={cn(
-                        "w-full flex items-center gap-2 p-4 bg-slate-50 border rounded-xl hover:bg-slate-100 transition-all text-left font-normal text-lg h-16",
-                        !formData.checkOutDate && "text-slate-400",
-                        activeDateField === 'checkOut' ? "border-orange-500 ring-2 ring-orange-500/20 bg-orange-50" : "border-slate-200"
-                      )}
-                    >
-                      <CalendarIcon className={cn("w-5 h-5", activeDateField === 'checkOut' ? "text-orange-500" : "text-slate-500")} />
-                      {formData.checkOutDate ? (
-                        <span className="text-slate-700">{format(parseISO(formData.checkOutDate), "d MMMM yyyy", { locale: th })}</span>
-                      ) : (
-                        <span>เลือกวันที่</span>
-                      )}
-                    </button>
-                 </div>
-               </div>
-
-               {activeDateField && (
-                  <div className="bg-slate-50 rounded-3xl p-6 border border-slate-200 animate-in slide-in-from-top-4 fade-in duration-300">
-                    <div className="flex items-center justify-between mb-4 px-2">
-                       <span className="font-bold text-slate-500">
-                          {activeDateField === 'checkIn' ? 'เลือกวันเช็คอิน (Check In)' : 'เลือกวันเช็คเอาท์ (Check Out)'}
-                       </span>
-                       <button 
-                         type="button" 
-                         onClick={() => setActiveDateField(null)}
-                         className="text-xs font-bold text-slate-400 hover:text-slate-600"
-                       >
-                         ปิดปฏิทิน
-                       </button>
-                    </div>
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-2 flex justify-center">
-                      <Calendar
-                        mode="single"
-                        selected={activeDateField === 'checkIn' 
-                          ? (formData.checkInDate ? parseISO(formData.checkInDate) : undefined)
-                          : (formData.checkOutDate ? parseISO(formData.checkOutDate) : undefined)
-                        }
-                        onSelect={(date) => handleDateSelect(activeDateField === 'checkIn' ? 'checkInDate' : 'checkOutDate', date)}
-                        initialFocus
-                        disabled={(date) => 
-                          activeDateField === 'checkOut' && formData.checkInDate
-                            ? date <= parseISO(formData.checkInDate) 
-                            : date < new Date()
-                        }
-                        locale={th}
-                        className="p-4"
-                        classNames={{
-                          months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-                          month: "space-y-6",
-                          caption: "flex justify-center pt-2 relative items-center w-full mb-4",
-                          caption_label: "text-2xl font-normal text-slate-800",
-                          nav: "space-x-1 flex items-center",
-                          nav_button: cn(
-                            buttonVariants({ variant: "outline" }),
-                            "h-12 w-12 bg-transparent p-0 opacity-50 hover:opacity-100 border-slate-200 rounded-xl"
-                          ),
-                          nav_button_previous: "absolute left-0",
-                          nav_button_next: "absolute right-0",
-                          table: "w-full border-collapse space-y-1",
-                          head_row: "flex mb-2 justify-between",
-                          head_cell: "text-slate-400 rounded-md w-12 font-normal text-lg",
-                          row: "flex w-full mt-2 justify-between",
-                          cell: "h-12 w-12 text-center text-lg p-0 relative [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-                          day: cn(
-                            buttonVariants({ variant: "ghost" }),
-                            "h-12 w-12 p-0 font-normal aria-selected:opacity-100 text-lg rounded-xl hover:bg-slate-100"
-                          ),
-                          day_selected: "bg-slate-900 text-white hover:bg-slate-800 focus:bg-slate-900 rounded-xl",
-                          day_today: "bg-slate-100 text-slate-900",
-                          day_outside: "text-slate-300 opacity-50",
-                          day_disabled: "text-slate-300 opacity-50",
-                          day_hidden: "invisible",
-                        }}
-                      />
-                    </div>
-                  </div>
-               )}
+             <div className="flex-1 overflow-y-auto p-4 flex justify-center bg-white">
+                <Calendar
+                  mode="single"
+                  selected={
+                    selectingDateFor === 'checkIn' 
+                      ? (formData.checkInDate ? parseISO(formData.checkInDate) : undefined)
+                      : (formData.checkOutDate ? parseISO(formData.checkOutDate) : undefined)
+                  }
+                  onSelect={handleDateSelect}
+                  initialFocus
+                  disabled={(date) => {
+                     if (selectingDateFor === 'checkOut' && formData.checkInDate) {
+                        return date <= parseISO(formData.checkInDate);
+                     }
+                     return date < new Date(); // Disable past dates
+                  }}
+                  locale={th}
+                  className="p-4"
+                  classNames={{
+                    months: "flex flex-col space-y-4",
+                    month: "space-y-6",
+                    caption: "flex justify-center pt-2 relative items-center w-full mb-4",
+                    caption_label: "text-2xl font-bold text-slate-800",
+                    nav: "space-x-1 flex items-center",
+                    nav_button: cn(
+                      buttonVariants({ variant: "outline" }),
+                      "h-12 w-12 bg-transparent p-0 opacity-50 hover:opacity-100 border-slate-200 rounded-xl"
+                    ),
+                    nav_button_previous: "absolute left-0",
+                    nav_button_next: "absolute right-0",
+                    table: "w-full border-collapse space-y-1",
+                    head_row: "flex mb-2 justify-between",
+                    head_cell: "text-slate-400 rounded-md w-12 font-normal text-lg",
+                    row: "flex w-full mt-2 justify-between",
+                    cell: "h-12 w-12 text-center text-lg p-0 relative [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                    day: cn(
+                      buttonVariants({ variant: "ghost" }),
+                      "h-12 w-12 p-0 font-normal aria-selected:opacity-100 text-lg rounded-xl hover:bg-slate-100"
+                    ),
+                    day_selected: "bg-slate-900 text-white hover:bg-slate-800 focus:bg-slate-900 rounded-xl",
+                    day_today: "bg-slate-100 text-slate-900",
+                    day_outside: "text-slate-300 opacity-50",
+                    day_disabled: "text-slate-300 opacity-50",
+                    day_hidden: "invisible",
+                  }}
+                />
              </div>
           </div>
-          
-          <button type="submit" className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl font-bold text-lg shadow-lg shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-2">
-            <Check className="w-6 h-6" />
-            ยืนยันการจอง
-          </button>
-        </form>
+        ) : (
+          /* FORM VIEW MODE */
+          <>
+            <div className="flex justify-between items-center p-8 pb-4">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-800">
+                  {isGroup ? 'สร้างการจองใหม่ (กลุ่ม)' : 'สร้างการจองใหม่'}
+                </h3>
+                <p className="text-slate-500 text-sm mt-1 max-h-20 overflow-y-auto">{label}</p>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 pt-2">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-4">
+                  {isGroup && (
+                    <div className="bg-orange-50 border border-orange-100 p-4 rounded-xl">
+                        <label className="block text-xs font-bold text-orange-800 uppercase tracking-wider mb-2">ชื่อคณะทัวร์ / กลุ่ม (Group Name)</label>
+                        <input 
+                          className="w-full p-3 bg-white border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+                          value={formData.groupName}
+                          onChange={e => setFormData({...formData, groupName: e.target.value})}
+                          placeholder="เช่น คณะทัวร์คุณสมหญิง"
+                        />
+                    </div>
+                  )}
+
+                  <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">ชื่อผู้จอง / หัวหน้าทัวร์</label>
+                      <div className="relative">
+                          <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                          <input 
+                          required
+                          className="w-full p-4 pl-12 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
+                          value={formData.guestName}
+                          onChange={e => setFormData({...formData, guestName: e.target.value})}
+                          placeholder="เช่น สมชาย ใจดี"
+                          />
+                      </div>
+                  </div>
+                  
+                  <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">เลขบัตรประชาชน / Passport</label>
+                      <div className="relative">
+                          <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                          <input 
+                          className="w-full p-4 pl-12 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
+                          value={formData.idNumber}
+                          onChange={e => setFormData({...formData, idNumber: e.target.value})}
+                          placeholder="เลขบัตรประชาชน 13 หลัก หรือ Passport No."
+                          />
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">เบอร์โทรศัพท์</label>
+                          <div className="relative">
+                              <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                              <input 
+                              required
+                              type="tel"
+                              className="w-full p-4 pl-10 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
+                              value={formData.phone}
+                              onChange={e => setFormData({...formData, phone: e.target.value})}
+                              placeholder="08x-xxx-xxxx"
+                              />
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">WhatsApp (ต่างชาติ)</label>
+                          <div className="relative">
+                              <MessageCircle className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
+                              <input 
+                              type="text"
+                              className="w-full p-4 pl-10 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
+                              value={formData.whatsapp}
+                              onChange={e => setFormData({...formData, whatsapp: e.target.value})}
+                              placeholder="+66..."
+                              />
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-lg font-bold text-slate-700 mb-2">วันเช็คอิน <span className="text-red-500">*</span></label>
+                        <button
+                          type="button"
+                          onClick={() => setSelectingDateFor('checkIn')}
+                          className={cn(
+                            "w-full flex items-center gap-2 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors text-left font-normal text-lg h-16",
+                            !formData.checkInDate && "text-slate-400"
+                          )}
+                        >
+                          <CalendarIcon className="w-5 h-5 text-slate-500" />
+                          {formData.checkInDate ? (
+                            <span className="text-slate-700">{format(parseISO(formData.checkInDate), "d MMMM yyyy", { locale: th })}</span>
+                          ) : (
+                            <span>เลือกวันที่</span>
+                          )}
+                        </button>
+                    </div>
+                    <div>
+                        <label className="block text-lg font-bold text-slate-700 mb-2">วันเช็คเอา��์ <span className="text-red-500">*</span></label>
+                        <button
+                          type="button"
+                          onClick={() => setSelectingDateFor('checkOut')}
+                          className={cn(
+                            "w-full flex items-center gap-2 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors text-left font-normal text-lg h-16",
+                            !formData.checkOutDate && "text-slate-400"
+                          )}
+                        >
+                          <CalendarIcon className="w-5 h-5 text-slate-500" />
+                          {formData.checkOutDate ? (
+                            <span className="text-slate-700">{format(parseISO(formData.checkOutDate), "d MMMM yyyy", { locale: th })}</span>
+                          ) : (
+                            <span>เลือกวันที่</span>
+                          )}
+                        </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <button type="submit" className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl font-bold text-lg shadow-lg shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-2">
+                  <Check className="w-6 h-6" />
+                  ยืนยันการจอง
+                </button>
+              </form>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

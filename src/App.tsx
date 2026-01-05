@@ -8,6 +8,7 @@ import { FrontDesk } from './components/FrontDesk';
 import { RoomGrid } from './components/RoomGrid';
 import { Housekeeping } from './components/Housekeeping';
 import { Reports } from './components/Reports';
+import { Inventory } from './components/Inventory';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -67,6 +68,7 @@ export default function App() {
       {currentView === 'frontdesk' && <FrontDesk currentUser={currentUser} />}
       {currentView === 'rooms' && <RoomGrid currentUser={currentUser} />}
       {currentView === 'housekeeping' && <Housekeeping currentUser={currentUser} />}
+      {currentView === 'inventory' && <Inventory currentUser={currentUser} />}
       {currentView === 'reports' && <Reports currentUser={currentUser} />}
     </Layout>
   );

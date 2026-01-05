@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { User, MaintenanceReport, Room } from '../types';
 import { 
   getRooms, 
@@ -8,14 +8,19 @@ import {
   updateMaintenanceReport 
 } from '../utils/storage';
 import { formatDateTime } from '../utils/dateHelpers';
-import { Sparkles, Wrench, AlertTriangle, CheckCircle, Plus, MessageSquare } from 'lucide-react';
+import { Sparkles, Wrench, AlertTriangle, CheckCircle, MessageSquare, Check, X } from 'lucide-react';
 
 interface HousekeepingProps {
   currentUser: User;
 }
 
 export function Housekeeping({ currentUser }: HousekeepingProps) {
-  const [rooms] = useState<Room[]>(getRooms());
+  // Initialize rooms and sort them by number to ensure they match Room Grid layout
+  const [rooms, setRooms] = useState<Room[]>(() => {
+    const loadedRooms = getRooms();
+    return loadedRooms.sort((a, b) => a.number - b.number);
+  });
+  
   const [reports, setReports] = useState<MaintenanceReport[]>(getMaintenanceReports());
   const [view, setView] = useState<'rooms' | 'maintenance'>('rooms');
   const [showReportModal, setShowReportModal] = useState(false);
@@ -25,23 +30,36 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
     priority: 'medium' as 'low' | 'medium' | 'high',
   });
 
+  // Derived state for filtered rooms
   const cleaningRooms = useMemo(() => rooms.filter(r => r.status === 'cleaning'), [rooms]);
   const maintenanceRooms = useMemo(() => rooms.filter(r => r.status === 'maintenance'), [rooms]);
   const pendingReports = useMemo(() => reports.filter(r => r.status !== 'resolved'), [reports]);
 
+  // Handle marking a room as clean
   const handleMarkClean = (room: Room) => {
     if (confirm(`ยืนยันว่าห้อง ${room.number} สะอาดแล้ว?`)) {
+      // 1. Update storage
       updateRoomStatus(room.id, 'available');
-      alert('✅ อัพเดทสถานะห้องเรียบร้อย');
-      window.location.reload();
+      
+      // 2. Update local state immediately for smooth UI
+      setRooms(prevRooms => 
+        prevRooms.map(r => 
+          r.id === room.id ? { ...r, status: 'available' } : r
+        )
+      );
+
+      // Optional: Show toast or small notification instead of alert
+      // alert('✅ อัพเดทสถานะห้องเรียบร้อย');
     }
   };
 
+  // Open modal to report maintenance
   const handleReportMaintenance = (room: Room) => {
     setSelectedRoom(room);
     setShowReportModal(true);
   };
 
+  // Submit maintenance report
   const handleSubmitReport = () => {
     if (!selectedRoom || !newReport.description) {
       alert('กรุณากรอกรายละเอียดปัญหา');
@@ -58,47 +76,74 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
       reportedAt: new Date().toISOString(),
     };
 
+    // 1. Update storage
     addMaintenanceReport(report);
     updateRoomStatus(selectedRoom.id, 'maintenance');
 
-    // Simulate LINE notification
+    // 2. Update local state
+    setReports(prev => [...prev, report]);
+    setRooms(prevRooms => 
+        prevRooms.map(r => 
+          r.id === selectedRoom.id ? { ...r, status: 'maintenance' } : r
+        )
+    );
+
     alert(`📱 LINE Notification Sent!\n\n⚠️ แจ้งซ่อม ห้อง ${selectedRoom.number}\n${newReport.description}\n\nระบบจะส่งการแจ้งเตือนไปยัง LINE ของผู้จัดการ`);
 
-    setReports(getMaintenanceReports());
+    // 3. Reset form
     setShowReportModal(false);
     setSelectedRoom(null);
     setNewReport({ description: '', priority: 'medium' });
   };
 
+  // Update status of a maintenance report
   const handleUpdateReportStatus = (reportId: string, status: MaintenanceReport['status']) => {
+    // 1. Update storage for report
     updateMaintenanceReport(reportId, { 
       status,
       resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined 
     });
 
+    // 2. If resolved, update room status to cleaning
     if (status === 'resolved') {
       const report = reports.find(r => r.id === reportId);
       if (report) {
         updateRoomStatus(report.roomId, 'cleaning');
+        
+        // Update local room state
+        setRooms(prevRooms => 
+            prevRooms.map(r => 
+              r.id === report.roomId ? { ...r, status: 'cleaning' } : r
+            )
+        );
       }
     }
 
-    setReports(getMaintenanceReports());
+    // 3. Update local reports state
+    setReports(prevReports => 
+      prevReports.map(r => 
+        r.id === reportId ? { 
+          ...r, 
+          status, 
+          resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined 
+        } : r
+      )
+    );
   };
 
   const getPriorityBadge = (priority: MaintenanceReport['priority']) => {
     const styles = {
-      'low': 'bg-neutral-100 text-neutral-800 border-neutral-300',
-      'medium': 'bg-orange-100 text-orange-800 border-orange-300',
-      'high': 'bg-red-100 text-red-800 border-red-300',
+      'low': 'bg-slate-100 text-slate-600 border-slate-200',
+      'medium': 'bg-orange-100 text-orange-700 border-orange-200',
+      'high': 'bg-red-100 text-red-700 border-red-200',
     };
     const labels = {
-      'low': '🔵 ต่ำ',
-      'medium': '🟡 ปานกลาง',
-      'high': '🔴 สูง',
+      'low': 'ต่ำ',
+      'medium': 'ปานกลาง',
+      'high': 'สูง',
     };
     return (
-      <span className={`px-3 py-1 rounded-lg border-2 text-sm ${styles[priority]}`}>
+      <span className={`px-3 py-1 rounded-lg border text-xs font-bold ${styles[priority]}`}>
         {labels[priority]}
       </span>
     );
@@ -106,54 +151,54 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
 
   const getStatusBadge = (status: MaintenanceReport['status']) => {
     const styles = {
-      'pending': 'bg-orange-100 text-orange-800 border-orange-300',
-      'in-progress': 'bg-neutral-100 text-neutral-800 border-neutral-300',
-      'resolved': 'bg-green-100 text-green-800 border-green-300',
+      'pending': 'bg-orange-50 text-orange-700 border-orange-200',
+      'in-progress': 'bg-blue-50 text-blue-700 border-blue-200',
+      'resolved': 'bg-green-50 text-green-700 border-green-200',
     };
     const labels = {
-      'pending': 'รอดำเนินการ',
+      'pending': 'รอรับเรื่อง',
       'in-progress': 'กำลังซ่อม',
       'resolved': 'เสร็จสิ้น',
     };
     return (
-      <span className={`px-3 py-1 rounded-lg border-2 text-sm ${styles[status]}`}>
+      <span className={`px-3 py-1 rounded-lg border text-xs font-bold ${styles[status]}`}>
         {labels[status]}
       </span>
     );
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-neutral-900 font-bold mb-2">แม่บ้านและซ่อมบำรุง / Housekeeping & Maintenance</h2>
-          <p className="text-neutral-500">จัดการความสะอาดและการซ่อมบำรุง</p>
+          <h2 className="text-3xl font-bold text-slate-800 mb-2">งานแม่บ้าน & ซ่อมบำรุง</h2>
+          <p className="text-slate-500">Housekeeping & Maintenance Task Board</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm">
           <button
             onClick={() => setView('rooms')}
-            className={`px-6 py-3 rounded-xl transition-colors ${
+            className={`px-6 py-3 rounded-xl transition-all font-bold flex items-center gap-2 ${
               view === 'rooms'
-                ? 'bg-neutral-900 text-white'
-                : 'bg-white border-2 border-neutral-200 text-neutral-700 hover:border-neutral-400'
+                ? 'bg-slate-800 text-white shadow-md'
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
             }`}
           >
-            <Sparkles className="w-5 h-5 inline mr-2" />
+            <Sparkles className="w-5 h-5" />
             ห้องพัก
           </button>
           <button
             onClick={() => setView('maintenance')}
-            className={`px-6 py-3 rounded-xl transition-colors relative ${
+            className={`px-6 py-3 rounded-xl transition-all font-bold flex items-center gap-2 relative ${
               view === 'maintenance'
-                ? 'bg-neutral-900 text-white'
-                : 'bg-white border-2 border-neutral-200 text-neutral-700 hover:border-neutral-400'
+                ? 'bg-slate-800 text-white shadow-md'
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
             }`}
           >
-            <Wrench className="w-5 h-5 inline mr-2" />
-            ซ่อมบำรุง
+            <Wrench className="w-5 h-5" />
+            รายการแจ้งซ่อม
             {pendingReports.length > 0 && (
-              <span className="absolute -top-2 -right-2 bg-orange-500 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold border-2 border-white">
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold border-2 border-white">
                 {pendingReports.length}
               </span>
             )}
@@ -166,65 +211,63 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
         <>
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center gap-4 mb-3">
-                <div className="p-3 bg-neutral-100 rounded-xl">
-                  <Sparkles className="w-8 h-8 text-neutral-600" />
-                </div>
-                <div>
-                  <div className="text-neutral-900 font-bold">รอทำความสะอาด</div>
-                  <div className="text-neutral-500">{cleaningRooms.length} ห้อง</div>
-                </div>
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center gap-4 group hover:-translate-y-1 transition-transform">
+              <div className="p-4 bg-blue-50 rounded-2xl text-blue-600 group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                 <Sparkles className="w-8 h-8" />
+              </div>
+              <div>
+                 <div className="text-slate-800 text-lg font-bold">รอทำความสะอาด</div>
+                 <div className="text-slate-500 font-medium">{cleaningRooms.length} ห้อง</div>
               </div>
             </div>
 
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center gap-4 mb-3">
-                <div className="p-3 bg-neutral-100 rounded-xl">
-                  <Wrench className="w-8 h-8 text-neutral-600" />
-                </div>
-                <div>
-                  <div className="text-neutral-900 font-bold">ซ่อมบำรุง</div>
-                  <div className="text-neutral-500">{maintenanceRooms.length} ห้อง</div>
-                </div>
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center gap-4 group hover:-translate-y-1 transition-transform">
+              <div className="p-4 bg-purple-50 rounded-2xl text-purple-600 group-hover:bg-purple-500 group-hover:text-white transition-colors">
+                 <Wrench className="w-8 h-8" />
+              </div>
+              <div>
+                 <div className="text-slate-800 text-lg font-bold">กำลังซ่อมบำรุง</div>
+                 <div className="text-slate-500 font-medium">{maintenanceRooms.length} ห้อง</div>
               </div>
             </div>
 
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center gap-4 mb-3">
-                <div className="p-3 bg-orange-100 rounded-xl">
-                  <AlertTriangle className="w-8 h-8 text-orange-600" />
-                </div>
-                <div>
-                  <div className="text-neutral-900 font-bold">รอดำเนินการ</div>
-                  <div className="text-neutral-500">{pendingReports.length} รายการ</div>
-                </div>
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center gap-4 group hover:-translate-y-1 transition-transform">
+              <div className="p-4 bg-orange-50 rounded-2xl text-orange-600 group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                 <AlertTriangle className="w-8 h-8" />
+              </div>
+              <div>
+                 <div className="text-slate-800 text-lg font-bold">รอดำเนินการ</div>
+                 <div className="text-slate-500 font-medium">{pendingReports.length} รายการ</div>
               </div>
             </div>
           </div>
 
           {/* Cleaning Rooms */}
           {cleaningRooms.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm p-6 border border-neutral-200">
-              <h3 className="text-neutral-900 font-bold mb-4 flex items-center">
-                <Sparkles className="w-6 h-6 mr-2 text-neutral-600" />
-                ห้องที่ต้องทำความสะอาด / Rooms to Clean
+            <div className="bg-white rounded-3xl shadow-sm p-8 border border-slate-200">
+              <h3 className="text-slate-800 font-bold mb-6 flex items-center text-xl">
+                <div className="p-2 bg-blue-50 rounded-lg text-blue-600 mr-3">
+                    <Sparkles className="w-6 h-6" />
+                </div>
+                ห้องที่ต้องทำความสะอาด
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
                 {cleaningRooms.map(room => (
-                  <div key={room.id} className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 text-center">
-                    <div className="text-neutral-900 font-bold mb-3">ห้อง {room.number}</div>
+                  <div key={room.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center hover:border-blue-300 transition-colors">
+                    <div className="text-slate-800 font-black text-2xl mb-4">#{room.number}</div>
                     <button
                       onClick={() => handleMarkClean(room)}
-                      className="w-full bg-neutral-900 hover:bg-neutral-800 text-white py-2 px-3 rounded-lg transition-colors text-sm font-medium mb-2"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-3 rounded-xl transition-colors text-sm font-bold mb-2 flex items-center justify-center gap-2 shadow-sm"
                     >
-                      ✓ สะอาดแล้ว
+                      <Check className="w-4 h-4" />
+                      สะอาด
                     </button>
                     <button
                       onClick={() => handleReportMaintenance(room)}
-                      className="w-full bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50 py-2 px-3 rounded-lg transition-colors text-sm font-medium"
+                      className="w-full bg-white border border-slate-200 text-slate-600 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 py-2.5 px-3 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2"
                     >
-                      🔧 แจ้งซ่อม
+                      <Wrench className="w-4 h-4" />
+                      แจ้งซ่อม
                     </button>
                   </div>
                 ))}
@@ -234,21 +277,27 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
 
           {/* Maintenance Rooms */}
           {maintenanceRooms.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm p-6 border border-neutral-200">
-              <h3 className="text-neutral-900 font-bold mb-4 flex items-center">
-                <Wrench className="w-6 h-6 mr-2 text-orange-600" />
-                ห้องที่อยู่ระหว่างซ่อมบำรุง / Under Maintenance
+            <div className="bg-white rounded-3xl shadow-sm p-8 border border-slate-200">
+              <h3 className="text-slate-800 font-bold mb-6 flex items-center text-xl">
+                 <div className="p-2 bg-orange-50 rounded-lg text-orange-600 mr-3">
+                    <Wrench className="w-6 h-6" />
+                </div>
+                ห้องที่อยู่ระหว่างซ่อมบำรุง
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
                 {maintenanceRooms.map(room => {
                   const report = reports.find(r => r.roomId === room.id && r.status !== 'resolved');
                   return (
-                    <div key={room.id} className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
-                      <div className="text-orange-900 font-bold mb-2">ห้อง {room.number}</div>
+                    <div key={room.id} className="bg-orange-50 border border-orange-200 rounded-2xl p-4 text-center">
+                      <div className="text-orange-900 font-black text-2xl mb-2">#{room.number}</div>
                       {report && (
-                        <div className="text-xs text-orange-700 mb-2">{report.description}</div>
+                        <div className="text-xs text-orange-800 mb-3 bg-orange-100/50 p-2 rounded-lg line-clamp-2 min-h-[2.5em]">
+                            {report.description}
+                        </div>
                       )}
-                      <div className="text-xs text-orange-600 font-medium">🔧 กำลังซ่อม</div>
+                      <div className="text-xs text-white bg-orange-500 font-bold py-1 px-2 rounded-full inline-block">
+                        กำลังซ่อม
+                      </div>
                     </div>
                   );
                 })}
@@ -257,10 +306,12 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
           )}
 
           {cleaningRooms.length === 0 && maintenanceRooms.length === 0 && (
-            <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-12 text-center">
-              <CheckCircle className="w-16 h-16 text-neutral-400 mx-auto mb-4" />
-              <h3 className="text-neutral-900 font-bold mb-2">✨ เยี่ยมมาก! ไม่มีห้องที่ต้องดูแล</h3>
-              <p className="text-neutral-500">ห้องพักทั้งหมดพร้อมให้บริการ</p>
+            <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center shadow-sm">
+              <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                 <CheckCircle className="w-12 h-12 text-green-500" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-800 mb-2">เยี่ยมมาก! ไม่มีงานค้าง</h3>
+              <p className="text-slate-500">ห้องพักทั้งหมดพร้อมให้บริการลูกค้า</p>
             </div>
           )}
         </>
@@ -270,51 +321,63 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
       {view === 'maintenance' && (
         <div className="space-y-6">
           {/* LINE Integration Info */}
-          <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
-            <h3 className="text-neutral-900 font-bold mb-3">
-              📱 LINE Integration
-            </h3>
-            <p className="text-neutral-600 mb-3">
-              เมื่อมีการแจ้งซ่อม ระบบจะส่งการแจ้งเตือนไปยัง LINE ของผู้จัดการโดยอัตโนมัติ
-            </p>
-            <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4">
-              <div className="text-sm text-neutral-500 mb-2">ตัวอย่างข้อความ LINE:</div>
-              <div className="bg-white p-3 rounded-lg text-sm border border-neutral-200">
-                <div className="text-orange-600 font-bold">⚠️ แจ้งซ่อม - Royyan Resort</div>
-                <div className="text-neutral-700 mt-1">ห้อง: 101</div>
-                <div className="text-neutral-700">ปัญหา: แอร์ไม่เย็น</div>
-                <div className="text-neutral-700">ผู้แจ้ง: {currentUser.name}</div>
-                <div className="text-neutral-700">เวลา: {formatDateTime(new Date().toISOString())}</div>
-              </div>
+          <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm flex flex-col md:flex-row gap-8 items-start">
+            <div className="flex-1">
+                <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
+                    <MessageSquare className="w-6 h-6 text-green-500" />
+                    LINE Integration System
+                </h3>
+                <p className="text-slate-500 mb-6">
+                เมื่อมีการแจ้งซ่อมใหม่ ระบบจะทำการส่งข้อความแจ้งเตือนไปยังกลุ่ม LINE ของแผนกช่างและผู้จัดการโดยอัตโนมัติ เพื่อความรวดเร็วในการแก้ไขปัญหา
+                </p>
+                <div className="flex gap-4">
+                    <button className="px-6 py-2 bg-green-500 text-white rounded-xl font-bold shadow-lg shadow-green-200 text-sm hover:bg-green-600 transition-colors">
+                        ทดสอบการส่งข้อความ
+                    </button>
+                    <button className="px-6 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors">
+                        ตั้งค่า Token
+                    </button>
+                </div>
+            </div>
+            
+            <div className="w-full md:w-80 bg-slate-100 rounded-2xl p-4 border border-slate-200">
+               <div className="text-xs font-bold text-slate-400 uppercase mb-2 text-center">Preview</div>
+               <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-sm space-y-1">
+                  <div className="text-green-600 font-bold text-xs mb-2">LINE Notify • Now</div>
+                  <div className="font-bold text-slate-800">⚠️ แจ้งซ่อมด่วน</div>
+                  <div className="text-slate-600">ห้อง: 101</div>
+                  <div className="text-slate-600">ปัญหา: แอร์ไม่เย็น</div>
+                  <div className="text-slate-600">ผู้แจ้ง: {currentUser.name}</div>
+               </div>
             </div>
           </div>
 
-          {/* Maintenance Reports */}
-          <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 overflow-hidden">
+          {/* Maintenance Reports Table */}
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-neutral-50 border-b border-neutral-200">
+                <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-neutral-700 font-bold">ห้อง</th>
-                    <th className="px-6 py-4 text-left text-neutral-700 font-bold">รายละเอียด</th>
-                    <th className="px-6 py-4 text-left text-neutral-700 font-bold">ความสำคัญ</th>
-                    <th className="px-6 py-4 text-left text-neutral-700 font-bold">สถานะ</th>
-                    <th className="px-6 py-4 text-left text-neutral-700 font-bold">เวลาแจ้ง</th>
-                    <th className="px-6 py-4 text-left text-neutral-700 font-bold">จัดการ</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ห้อง</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">รายละเอียด</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ความสำคัญ</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">สถานะ</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">เวลาแจ้ง</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">จัดการ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-100">
+                <tbody className="divide-y divide-slate-100">
                   {reports.map(report => {
                     const room = rooms.find(r => r.id === report.roomId);
                     return (
-                      <tr key={report.id} className="hover:bg-neutral-50">
-                        <td className="px-6 py-4 text-neutral-900 font-medium">
-                          ห้อง {room?.number}
+                      <tr key={report.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4">
+                            <span className="font-black text-slate-800">#{room?.number}</span>
                         </td>
-                        <td className="px-6 py-4 text-neutral-600">{report.description}</td>
+                        <td className="px-6 py-4 text-slate-600 font-medium">{report.description}</td>
                         <td className="px-6 py-4">{getPriorityBadge(report.priority)}</td>
                         <td className="px-6 py-4">{getStatusBadge(report.status)}</td>
-                        <td className="px-6 py-4 text-neutral-500 text-sm">
+                        <td className="px-6 py-4 text-slate-400 text-sm font-medium">
                           {formatDateTime(report.reportedAt)}
                         </td>
                         <td className="px-6 py-4">
@@ -323,17 +386,17 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
                               {report.status === 'pending' && (
                                 <button
                                   onClick={() => handleUpdateReportStatus(report.id, 'in-progress')}
-                                  className="px-3 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg transition-colors text-sm"
+                                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg transition-colors text-xs font-bold"
                                 >
-                                  เริ่มซ่อม
+                                  รับงาน
                                 </button>
                               )}
                               {report.status === 'in-progress' && (
                                 <button
                                   onClick={() => handleUpdateReportStatus(report.id, 'resolved')}
-                                  className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm"
+                                  className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-xs font-bold"
                                 >
-                                  ✓ เสร็จสิ้น
+                                  เสร็จสิ้น
                                 </button>
                               )}
                             </div>
@@ -346,8 +409,9 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
               </table>
               
               {reports.length === 0 && (
-                <div className="text-center py-12 text-neutral-400">
-                  ไม่มีรายการแจ้งซ่อม / No maintenance reports
+                <div className="text-center py-12 text-slate-400">
+                   <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                   <p className="font-medium">ไม่มีรายการแจ้งซ่อมในระบบ</p>
                 </div>
               )}
             </div>
@@ -357,82 +421,84 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
 
       {/* Report Modal */}
       {showReportModal && selectedRoom && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
-            <div className="bg-neutral-900 text-white px-8 py-6">
-              <h2 className="text-xl font-bold">🔧 แจ้งซ่อมห้อง {selectedRoom.number}</h2>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-slate-800 text-white px-8 py-6 flex justify-between items-center">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                 <Wrench className="w-5 h-5" />
+                 แจ้งซ่อม ห้อง {selectedRoom.number}
+              </h2>
+              <button 
+                onClick={() => setShowReportModal(false)}
+                className="p-2 hover:bg-slate-700 rounded-full text-slate-300 hover:text-white transition-colors"
+              >
+                 <X className="w-5 h-5" />
+              </button>
             </div>
 
             <div className="p-8 space-y-6">
               <div>
-                <label className="block text-neutral-700 font-bold mb-2">รายละเอียดปัญหา / Description *</label>
+                <label className="block text-slate-700 font-bold mb-2">รายละเอียดปัญหา <span className="text-red-500">*</span></label>
                 <textarea
                   value={newReport.description}
                   onChange={(e) => setNewReport({ ...newReport, description: e.target.value })}
                   rows={4}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                  placeholder="ระบุรายละเอียดปัญหา เช่น แอร์ไม่เย็น, ก๊อกน้ำรั่ว, โคมไฟเสีย"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all bg-slate-50"
+                  placeholder="ระบุอาการเสีย หรือสิ่งที่ต้องซ่อมแซม..."
                 />
               </div>
 
               <div>
-                <label className="block text-neutral-700 font-bold mb-2">ความสำคัญ / Priority</label>
-                <div className="grid grid-cols-3 gap-4">
+                <label className="block text-slate-700 font-bold mb-2">ระดับความเร่งด่วน</label>
+                <div className="grid grid-cols-3 gap-3">
                   <button
                     onClick={() => setNewReport({ ...newReport, priority: 'low' })}
-                    className={`p-4 border rounded-xl transition-all ${
+                    className={`p-3 border rounded-xl transition-all font-bold text-sm ${
                       newReport.priority === 'low'
-                        ? 'border-neutral-500 bg-neutral-100 text-neutral-900 font-bold'
-                        : 'border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300'
+                        ? 'border-slate-500 bg-slate-100 text-slate-800 ring-2 ring-slate-200'
+                        : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
                     }`}
                   >
-                    🔵 ต่ำ
+                    ปกติ
                   </button>
                   <button
                     onClick={() => setNewReport({ ...newReport, priority: 'medium' })}
-                    className={`p-4 border rounded-xl transition-all ${
+                    className={`p-3 border rounded-xl transition-all font-bold text-sm ${
                       newReport.priority === 'medium'
-                        ? 'border-orange-500 bg-orange-50 text-orange-800 font-bold'
-                        : 'border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300'
+                        ? 'border-orange-500 bg-orange-50 text-orange-800 ring-2 ring-orange-100'
+                        : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
                     }`}
                   >
-                    🟡 ปานกลาง
+                    ปานกลาง
                   </button>
                   <button
                     onClick={() => setNewReport({ ...newReport, priority: 'high' })}
-                    className={`p-4 border rounded-xl transition-all ${
+                    className={`p-3 border rounded-xl transition-all font-bold text-sm ${
                       newReport.priority === 'high'
-                        ? 'border-red-500 bg-red-50 text-red-800 font-bold'
-                        : 'border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300'
+                        ? 'border-red-500 bg-red-50 text-red-800 ring-2 ring-red-100'
+                        : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
                     }`}
                   >
-                    🔴 สูง
+                    ด่วนที่สุด
                   </button>
                 </div>
               </div>
 
-              <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4">
-                <p className="text-neutral-600 text-sm">
-                  📱 ระบบจะส่งการแจ้งเตือนไปยัง LINE ของผู้จัดการทันที
-                </p>
+              <div className="bg-green-50 border border-green-100 rounded-2xl p-4 flex items-center gap-3">
+                 <div className="p-2 bg-green-100 rounded-full text-green-600">
+                    <MessageSquare className="w-4 h-4" />
+                 </div>
+                 <p className="text-green-800 text-xs font-medium">
+                   ระบบจะส่งการแจ้งเตือนไปยัง LINE Official Account ทันทีที่กดส่งเรื่อง
+                 </p>
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex gap-4 pt-4 border-t border-slate-100">
                 <button
                   onClick={handleSubmitReport}
-                  className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-xl transition-colors font-bold"
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl transition-colors font-bold shadow-lg shadow-orange-200 active:scale-95"
                 >
-                  📨 ส่งการแจ้งซ่อม / Submit Report
-                </button>
-                <button
-                  onClick={() => {
-                    setShowReportModal(false);
-                    setSelectedRoom(null);
-                    setNewReport({ description: '', priority: 'medium' });
-                  }}
-                  className="px-8 py-4 bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-700 rounded-xl transition-colors font-medium"
-                >
-                  ยกเลิก / Cancel
+                  ส่งเรื่องแจ้งซ่อม
                 </button>
               </div>
             </div>

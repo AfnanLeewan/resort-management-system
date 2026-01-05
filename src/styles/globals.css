@@ -187,12 +187,74 @@ html {
 /* Enhanced readability for seniors - larger base font */
 @media print {
   @page {
-    margin: 1cm;
+    size: A4;
+    margin: 0;
   }
   
-  /* Hide navigation and action buttons when printing */
-  nav, button:not(.receipt-print-btn) {
+  body {
+    background: white;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    visibility: hidden;
+  }
+
+  /* Force visibility on the receipt content */
+  #receipt-content,
+  #receipt-content * {
+    visibility: visible;
+  }
+
+  /* Main Receipt Container - Centered on Page */
+  #receipt-content {
+    /* Position absolutely to cover the page */
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    min-height: 100% !important;
+    
+    /* Flexbox for centering */
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important; /* Vertical Center */
+    align-items: center !important; /* Horizontal Center */
+    
+    /* Clean background */
+    background: white !important;
+    z-index: 9999;
+    
+    /* Remove default padding from screen view and add print margins */
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* constrain content width for readability */
+  #receipt-content > * {
+    width: 100% !important;
+    max-width: 180mm !important; /* Approx A4 width minus margins */
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  
+  /* Hide specific UI elements that might interfere */
+  button, nav, .close-btn {
     display: none !important;
+  }
+
+  /* Ensure text colors are printed exactly as designed */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  /* Disable transforms to prevent layout issues */
+  * {
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
   }
 }
 

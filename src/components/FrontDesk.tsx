@@ -1,11 +1,17 @@
 import { useState, useMemo } from 'react';
 import { Booking, Room, User } from '../types';
 import { getRooms, getBookings, addBooking, updateBooking, updateRoomStatus } from '../utils/storage';
-import { getTodayDateString, formatDate, formatDateTime } from '../utils/dateHelpers';
-import { PRICING } from '../utils/pricing';
-import { Plus, Search, Calendar, Users, Phone, CreditCard } from 'lucide-react';
+import { getTodayDateString, formatDate, formatDateTime, formatCurrency } from '../utils/dateHelpers';
+import { PRICING, extractBasePrice, extractVAT } from '../utils/pricing';
+import { Plus, Search, Calendar as CalendarIcon, Users, Phone, CreditCard, ArrowLeft, User as UserIcon, CalendarDays, BedDouble, Info, CheckCircle2, Clock, Check, FileText } from 'lucide-react';
 import { CheckInModal } from './CheckInModal';
 import { CheckOutModal } from './CheckOutModal';
+import { BookingDetailsModal } from './BookingDetailsModal';
+import { Calendar } from './ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { format } from 'date-fns';
+import { th } from 'date-fns/locale';
+import { cn } from './ui/utils';
 
 interface FrontDeskProps {
   currentUser: User;
@@ -16,8 +22,11 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
   const [bookings, setBookings] = useState<Booking[]>(getBookings());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  
+  // Modal States
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showCheckOut, setShowCheckOut] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   // New booking form state
   const [newBooking, setNewBooking] = useState({
@@ -27,7 +36,7 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     checkInDate: getTodayDateString(),
     checkOutDate: '',
     roomType: 'single' as 'single' | 'double',
-    roomCount: 1,
+    selectedRoomIds: [] as string[],
     pricingTier: 'general' as 'general' | 'tour' | 'vip',
     source: 'walk-in' as 'walk-in' | 'phone' | 'ota',
     groupName: '',
@@ -36,6 +45,16 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
 
   const rooms = getRooms();
   const availableRooms = rooms.filter(r => r.status === 'available');
+
+  // Logic for sorting and labeling rooms (Same as RoomGrid)
+  const labeledRooms = useMemo(() => {
+    const sorted = [...rooms].sort((a, b) => a.number - b.number);
+    const rc = sorted.slice(0, 10).map((r, i) => ({ ...r, label: `RC${String(i + 1).padStart(2, '0')}`, displayType: 'single' }));
+    const rb = sorted.slice(10, 20).map((r, i) => ({ ...r, label: `RB${String(i + 1).padStart(2, '0')}`, displayType: 'single' }));
+    const ra = sorted.slice(20, 30).map((r, i) => ({ ...r, label: `RA${String(i + 1).padStart(2, '0')}`, displayType: 'double' }));
+    
+    return [...rc, ...rb, ...ra];
+  }, [rooms]);
 
   const filteredBookings = useMemo(() => {
     if (!searchTerm) return bookings;
@@ -61,22 +80,14 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
       return;
     }
 
-    // Find available rooms of the requested type
-    const availableRoomsOfType = availableRooms.filter(r => r.type === newBooking.roomType);
-    
-    if (availableRoomsOfType.length < newBooking.roomCount) {
-      alert(`ห้องว่างไม่เพียงพอ / Not enough available rooms. Available: ${availableRoomsOfType.length}`);
-      return;
+    if (newBooking.selectedRoomIds.length === 0) {
+        alert('กรุณาเลือกห้องพักอย่างน้อย 1 ห้อง / Please select at least 1 room');
+        return;
     }
 
-    // Select rooms
-    const selectedRooms = availableRoomsOfType.slice(0, newBooking.roomCount);
-    const roomIds = selectedRooms.map(r => r.id);
-
-    // Create booking
     const booking: Booking = {
       id: `BK${Date.now()}`,
-      roomIds,
+      roomIds: newBooking.selectedRoomIds,
       guest: {
         name: newBooking.guestName,
         idNumber: newBooking.idNumber,
@@ -95,14 +106,8 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     };
 
     addBooking(booking);
-    
-    // Update room status to reserved (we'll keep them available until check-in)
-    // This is intentional - rooms are only marked occupied on actual check-in
-    
-    // Refresh bookings
     setBookings(getBookings());
     
-    // Reset form
     setNewBooking({
       guestName: '',
       idNumber: '',
@@ -110,7 +115,7 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
       checkInDate: getTodayDateString(),
       checkOutDate: '',
       roomType: 'single',
-      roomCount: 1,
+      selectedRoomIds: [],
       pricingTier: 'general',
       source: 'walk-in',
       groupName: '',
@@ -131,6 +136,11 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     setShowCheckOut(true);
   };
 
+  const handleShowDetails = (booking: Booking) => {
+    setSelectedBooking(booking);
+    setShowDetails(true);
+  };
+
   const handleCheckInComplete = () => {
     setShowCheckIn(false);
     setSelectedBooking(null);
@@ -143,207 +153,299 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     setBookings(getBookings());
   };
 
+  const toggleRoomSelection = (roomId: string) => {
+    setNewBooking(prev => {
+        const isSelected = prev.selectedRoomIds.includes(roomId);
+        if (isSelected) {
+            return { ...prev, selectedRoomIds: prev.selectedRoomIds.filter(id => id !== roomId) };
+        } else {
+            return { ...prev, selectedRoomIds: [...prev.selectedRoomIds, roomId] };
+        }
+    });
+  };
+
   const getStatusBadge = (status: Booking['status']) => {
     const styles = {
-      'reserved': 'bg-blue-100 text-blue-800 border-blue-300',
-      'checked-in': 'bg-green-100 text-green-800 border-green-300',
-      'checked-out': 'bg-gray-100 text-gray-800 border-gray-300',
-      'cancelled': 'bg-red-100 text-red-800 border-red-300',
+      'reserved': 'bg-blue-50 text-blue-700 border-blue-200',
+      'checked-in': 'bg-green-50 text-green-700 border-green-200',
+      'checked-out': 'bg-slate-100 text-slate-600 border-slate-200',
+      'cancelled': 'bg-red-50 text-red-700 border-red-200',
     };
     const labels = {
-      'reserved': 'จอง',
-      'checked-in': 'เช็คอิน',
-      'checked-out': 'เช็คเอาท์',
+      'reserved': 'จองล่วงหน้า',
+      'checked-in': 'เข้าพักอยู่',
+      'checked-out': 'เช็คเอาท์แล้ว',
       'cancelled': 'ยกเลิก',
     };
     return (
-      <span className={`px-4 py-2 rounded-lg border-2 ${styles[status]}`}>
+      <span className={`px-3 py-1 rounded-lg border text-xs font-bold ${styles[status]}`}>
         {labels[status]}
       </span>
     );
   };
 
+  const filteredAvailableLabeledRooms = labeledRooms.filter(r => r.status === 'available' && r.type === newBooking.roomType);
+
   if (view === 'new-booking') {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-black mb-2">สร้างการจองใหม่ / New Booking</h2>
-            <p className="text-gray-600">กรอกข้อมูลผู้เข้าพักและห้องพัก</p>
+            <h2 className="text-3xl font-bold text-slate-800 mb-2">สร้างการจองใหม่</h2>
+            <p className="text-slate-500">กรอกข้อมูลผู้เข้าพักและห้องพักเพื่อทำการจอง</p>
           </div>
           <button
             onClick={() => setView('list')}
-            className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors"
+            className="px-6 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl transition-colors flex items-center gap-2 font-bold"
           >
-            ← ย้อนกลับ / Back
+            <ArrowLeft className="w-5 h-5" />
+            ย้อนกลับ
           </button>
         </div>
 
-        <div className="bg-white rounded-lg p-8 border border-neutral-200">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
             {/* Guest Information */}
-            <div className="space-y-5">
-              <h3 className="text-neutral-900 pb-3 border-b border-neutral-200">
-                ข้อมูลผู้เข้าพัก / Guest Information
-              </h3>
+            <div className="space-y-6">
+              <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+                 <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
+                    <UserIcon className="w-6 h-6" />
+                 </div>
+                 <h3 className="text-xl font-bold text-slate-800">ข้อมูลผู้เข้าพัก</h3>
+              </div>
               
-              <div>
-                <label className="block text-neutral-700 mb-2">ชื่อ-นามสกุล / Full Name *</label>
-                <input
-                  type="text"
-                  value={newBooking.guestName}
-                  onChange={(e) => setNewBooking({ ...newBooking, guestName: e.target.value })}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                  placeholder="ใส่ชื่อ-นามสกุล"
-                />
-              </div>
+              <div className="space-y-4">
+                <div>
+                    <label className="block text-slate-700 font-bold mb-2">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
+                    <input
+                    type="text"
+                    value={newBooking.guestName}
+                    onChange={(e) => setNewBooking({ ...newBooking, guestName: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all bg-slate-50"
+                    placeholder="เช่น สมชาย ใจดี"
+                    />
+                </div>
 
-              <div>
-                <label className="block text-neutral-700 mb-2">เลขบัตรประชาชน/Passport *</label>
-                <input
-                  type="text"
-                  value={newBooking.idNumber}
-                  onChange={(e) => setNewBooking({ ...newBooking, idNumber: e.target.value })}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                  placeholder="เลขบัตร 13 หลัก หรือ Passport"
-                />
-              </div>
+                <div>
+                    <label className="block text-slate-700 font-bold mb-2">เลขบัตรประชาชน/Passport <span className="text-red-500">*</span></label>
+                    <input
+                    type="text"
+                    value={newBooking.idNumber}
+                    onChange={(e) => setNewBooking({ ...newBooking, idNumber: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all bg-slate-50"
+                    placeholder="เลขบัตร 13 หลัก"
+                    />
+                </div>
 
-              <div>
-                <label className="block text-neutral-700 mb-2">เบอร์โทรศัพท์ / Phone *</label>
-                <input
-                  type="tel"
-                  value={newBooking.phone}
-                  onChange={(e) => setNewBooking({ ...newBooking, phone: e.target.value })}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                  placeholder="08x-xxx-xxxx"
-                />
-              </div>
-
-              <div>
-                <label className="block text-neutral-700 mb-2">ช่องทางการจอง / Booking Source</label>
-                <select
-                  value={newBooking.source}
-                  onChange={(e) => setNewBooking({ ...newBooking, source: e.target.value as any })}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                >
-                  <option value="walk-in">Walk-in (เดินเข้า)</option>
-                  <option value="phone">Phone (โทรศัพท์)</option>
-                  <option value="ota">OTA (Agoda/Booking)</option>
-                </select>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-slate-700 font-bold mb-2">เบอร์โทรศัพท์ <span className="text-red-500">*</span></label>
+                        <input
+                        type="tel"
+                        value={newBooking.phone}
+                        onChange={(e) => setNewBooking({ ...newBooking, phone: e.target.value })}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all bg-slate-50"
+                        placeholder="08x-xxx-xxxx"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-slate-700 font-bold mb-2">ช่องทางการจอง</label>
+                        <select
+                        value={newBooking.source}
+                        onChange={(e) => setNewBooking({ ...newBooking, source: e.target.value as any })}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all bg-slate-50"
+                        >
+                        <option value="walk-in">Walk-in (หน้าร้าน)</option>
+                        <option value="phone">Phone (โทรศัพท์)</option>
+                        <option value="ota">OTA (Agoda/Booking)</option>
+                        </select>
+                    </div>
+                </div>
               </div>
             </div>
 
             {/* Booking Details */}
-            <div className="space-y-5">
-              <h3 className="text-neutral-900 pb-3 border-b border-neutral-200">
-                รายละเอียดการจอง / Booking Details
-              </h3>
-
-              <div>
-                <label className="block text-neutral-700 mb-2">วันเช็คอิน / Check-in Date *</label>
-                <input
-                  type="date"
-                  value={newBooking.checkInDate}
-                  onChange={(e) => setNewBooking({ ...newBooking, checkInDate: e.target.value })}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                />
+            <div className="space-y-6">
+              <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+                 <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+                    <CalendarDays className="w-6 h-6" />
+                 </div>
+                 <h3 className="text-xl font-bold text-slate-800">รายละเอียดห้องพัก</h3>
               </div>
 
-              <div>
-                <label className="block text-neutral-700 mb-2">วันเช็คเอาท์ / Check-out Date *</label>
-                <input
-                  type="date"
-                  value={newBooking.checkOutDate}
-                  onChange={(e) => setNewBooking({ ...newBooking, checkOutDate: e.target.value })}
-                  min={newBooking.checkInDate}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                />
-              </div>
+              <div className="space-y-4">
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-slate-700 font-bold mb-2">วันเช็คอิน <span className="text-red-500">*</span></label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button className={cn(
+                                "w-full px-4 py-3 border border-slate-200 rounded-xl outline-none transition-all bg-slate-50 text-left flex items-center gap-2",
+                                !newBooking.checkInDate && "text-slate-400"
+                            )}>
+                                <CalendarIcon className="w-4 h-4 text-slate-500" />
+                                {newBooking.checkInDate ? format(new Date(newBooking.checkInDate), "PPP", { locale: th }) : "เลือกวันที่"}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                mode="single"
+                                selected={newBooking.checkInDate ? new Date(newBooking.checkInDate) : undefined}
+                                onSelect={(date) => {
+                                    if (date) {
+                                        setNewBooking({ ...newBooking, checkInDate: format(date, "yyyy-MM-dd") });
+                                    }
+                                }}
+                                initialFocus
+                                locale={th}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                    </div>
 
-              <div>
-                <label className="block text-neutral-700 mb-2">ประเภทห้อง / Room Type</label>
-                <select
-                  value={newBooking.roomType}
-                  onChange={(e) => setNewBooking({ ...newBooking, roomType: e.target.value as any })}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                >
-                  <option value="single">เตียงเดี่ยว / Single Bed</option>
-                  <option value="double">เตียงคู่ / Double Bed</option>
-                </select>
-              </div>
+                    <div>
+                        <label className="block text-slate-700 font-bold mb-2">วันเช็คเอาท์ <span className="text-red-500">*</span></label>
+                         <Popover>
+                          <PopoverTrigger asChild>
+                            <button className={cn(
+                                "w-full px-4 py-3 border border-slate-200 rounded-xl outline-none transition-all bg-slate-50 text-left flex items-center gap-2",
+                                !newBooking.checkOutDate && "text-slate-400"
+                            )}>
+                                <CalendarIcon className="w-4 h-4 text-slate-500" />
+                                {newBooking.checkOutDate ? format(new Date(newBooking.checkOutDate), "PPP", { locale: th }) : "เลือกวันที่"}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                mode="single"
+                                selected={newBooking.checkOutDate ? new Date(newBooking.checkOutDate) : undefined}
+                                onSelect={(date) => {
+                                    if (date) {
+                                        setNewBooking({ ...newBooking, checkOutDate: format(date, "yyyy-MM-dd") });
+                                    }
+                                }}
+                                disabled={(date) => newBooking.checkInDate ? date < new Date(newBooking.checkInDate) : false}
+                                initialFocus
+                                locale={th}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                    </div>
+                 </div>
 
-              <div>
-                <label className="block text-neutral-700 mb-2">จำนวนห้อง / Number of Rooms</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={newBooking.roomCount}
-                  onChange={(e) => setNewBooking({ ...newBooking, roomCount: parseInt(e.target.value) || 1 })}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                />
-                <p className="text-sm text-neutral-500 mt-1">
-                  ห้องว่าง: {availableRooms.filter(r => r.type === newBooking.roomType).length} ห้อง
-                </p>
-              </div>
+                 <div>
+                    <label className="block text-slate-700 font-bold mb-2">ประเภทห้อง</label>
+                    <select
+                        value={newBooking.roomType}
+                        onChange={(e) => setNewBooking({ ...newBooking, roomType: e.target.value as any, selectedRoomIds: [] })}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all bg-slate-50"
+                    >
+                        <option value="single">เตียงเดี่ยว (Single)</option>
+                        <option value="double">เตียงคู่ (Double)</option>
+                    </select>
+                 </div>
 
-              <div>
-                <label className="block text-neutral-700 mb-2">ประเภทลูกค้า / Pricing Tier</label>
-                <select
-                  value={newBooking.pricingTier}
-                  onChange={(e) => setNewBooking({ ...newBooking, pricingTier: e.target.value as any })}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                >
-                  <option value="general">ทั่วไป ฿890 / General Customer</option>
-                  <option value="tour">ทัวร์/แนะนำ ฿840 / Tour/Referral</option>
-                  <option value="vip">ผู้ถือหุ้น/VIP ฿400 / Shareholder/VIP</option>
-                </select>
+                 <div>
+                    <label className="block text-slate-700 font-bold mb-2 flex justify-between items-center">
+                        <span>เลือกห้องพัก ({newBooking.selectedRoomIds.length})</span>
+                        <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                            ว่าง {filteredAvailableLabeledRooms.length} ห้อง
+                        </span>
+                    </label>
+                    
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-48 overflow-y-auto p-2 border border-slate-200 rounded-xl bg-slate-50">
+                        {filteredAvailableLabeledRooms.map((room) => {
+                            const isSelected = newBooking.selectedRoomIds.includes(room.id);
+                            return (
+                                <button
+                                    key={room.id}
+                                    onClick={() => toggleRoomSelection(room.id)}
+                                    className={cn(
+                                        "py-2 px-1 rounded-lg text-sm font-bold border transition-all flex flex-col items-center justify-center gap-1",
+                                        isSelected 
+                                            ? "bg-orange-500 text-white border-orange-600 shadow-md ring-2 ring-orange-200" 
+                                            : "bg-white text-slate-600 border-slate-200 hover:border-orange-300 hover:text-orange-500"
+                                    )}
+                                >
+                                    <span>{room.label}</span>
+                                    {isSelected && <Check className="w-3 h-3" />}
+                                </button>
+                            );
+                        })}
+                        {filteredAvailableLabeledRooms.length === 0 && (
+                            <div className="col-span-full text-center py-4 text-slate-400 text-sm">
+                                ไม่มีห้องว่างในประเภทนี้
+                            </div>
+                        )}
+                    </div>
+                 </div>
+
+                 <div>
+                    <label className="block text-slate-700 font-bold mb-2">ประเภทราคา / Tier</label>
+                    <select
+                    value={newBooking.pricingTier}
+                    onChange={(e) => setNewBooking({ ...newBooking, pricingTier: e.target.value as any })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all bg-slate-50"
+                    >
+                    <option value="general">ทั่วไป ฿890 (General)</option>
+                    <option value="tour">ทัวร์/แนะนำ ฿840 (Tour)</option>
+                    <option value="vip">ผู้ถือหุ้น/VIP ฿400 (Shareholder)</option>
+                    </select>
+                    <div className="mt-2 text-xs text-slate-500 flex gap-2 pl-1 flex-wrap">
+                        <span className="font-medium text-slate-700">ราคา {formatCurrency(PRICING[newBooking.pricingTier])} (รวม VAT 7%)</span>
+                        <span className="text-slate-300">|</span>
+                        <span>ค่าห้อง: {formatCurrency(extractBasePrice(PRICING[newBooking.pricingTier]))}</span>
+                        <span className="text-slate-300">|</span>
+                        <span>VAT: {formatCurrency(extractVAT(PRICING[newBooking.pricingTier]))}</span>
+                    </div>
+                 </div>
               </div>
             </div>
 
             {/* Optional Fields */}
-            <div className="md:col-span-2 space-y-5">
-              <h3 className="text-neutral-900 pb-3 border-b border-neutral-200">
-                ข้อมูลเพิ่มเติม (ถ้ามี) / Additional Information
-              </h3>
-
-              <div>
-                <label className="block text-neutral-700 mb-2">ชื่อกรุ๊ปทัวร์ / Group Name (สำหรับทัวร์)</label>
-                <input
-                  type="text"
-                  value={newBooking.groupName}
-                  onChange={(e) => setNewBooking({ ...newBooking, groupName: e.target.value })}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                  placeholder="ชื่อบริษัททัวร์หรือกรุ๊ป"
-                />
-              </div>
-
-              <div>
-                <label className="block text-neutral-700 mb-2">หมายเหตุ / Notes</label>
-                <textarea
-                  value={newBooking.notes}
-                  onChange={(e) => setNewBooking({ ...newBooking, notes: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-                  placeholder="หมายเหตุเพิ่มเติม"
-                />
-              </div>
+            <div className="md:col-span-2 space-y-6 pt-6 border-t border-slate-100">
+               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <Info className="w-5 h-5 text-slate-400" />
+                  ข้อมูลเพิ่มเติม
+               </h3>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-2">ชื่อกรุ๊ปทัวร์ (ถ้ามี)</label>
+                    <input
+                    type="text"
+                    value={newBooking.groupName}
+                    onChange={(e) => setNewBooking({ ...newBooking, groupName: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all bg-slate-50"
+                    placeholder="ระบุชื่อกรุ๊ป"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-2">หมายเหตุ</label>
+                    <textarea
+                    value={newBooking.notes}
+                    onChange={(e) => setNewBooking({ ...newBooking, notes: e.target.value })}
+                    rows={1}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all bg-slate-50 resize-none"
+                    placeholder="ความต้องการพิเศษ..."
+                    />
+                  </div>
+               </div>
             </div>
           </div>
 
-          <div className="mt-8 flex gap-4">
+          <div className="mt-12 flex gap-4 pt-6 border-t border-slate-100">
             <button
               onClick={handleCreateBooking}
-              className="flex-1 bg-neutral-900 hover:bg-neutral-800 text-white py-4 rounded-lg transition-colors"
+              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-orange-200 transition-all active:scale-95 text-lg flex items-center justify-center gap-2"
             >
-              ✅ สร้างการจอง / Create Booking
+              <CheckCircle2 className="w-6 h-6" />
+              ยืนยันการจอง {newBooking.selectedRoomIds.length > 0 && `(${newBooking.selectedRoomIds.length} ห้อง)`}
             </button>
             <button
               onClick={() => setView('list')}
-              className="px-8 py-4 bg-white hover:bg-neutral-50 text-neutral-700 rounded-lg border border-neutral-300 transition-colors"
+              className="px-8 py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl font-bold transition-all"
             >
-              ยกเลิก / Cancel
+              ยกเลิก
             </button>
           </div>
         </div>
@@ -352,105 +454,106 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-neutral-900 mb-2">Front Desk / เคาน์เตอร์</h2>
-          <p className="text-neutral-600">จัดการการจองและเช็คอิน-เช็คเอาท์</p>
+          <h2 className="text-3xl font-bold text-slate-800 mb-2">เคาน์เตอร์บริการ</h2>
+          <p className="text-slate-500">จัดการการจอง เช็คอิน และเช็คเอาท์</p>
         </div>
         <button
           onClick={() => setView('new-booking')}
-          className="flex items-center gap-2 px-6 py-4 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg transition-colors"
+          className="flex items-center gap-2 px-6 py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl transition-all shadow-lg shadow-orange-200 font-bold active:scale-95"
         >
           <Plus className="w-5 h-5" />
           <span>สร้างการจองใหม่</span>
         </button>
       </div>
 
-      {/* Search */}
-      <div className="bg-white rounded-lg p-6 border border-neutral-200">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="ค้นหาด้วยชื่อ, เบอร์โทร, เลขบัตร, หรือเลขการจอง"
-            className="w-full pl-12 pr-4 py-3 border border-neutral-300 rounded-lg focus:border-neutral-900 focus:outline-none bg-white"
-          />
-        </div>
+      {/* Search & Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+         <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
+            <Search className="w-6 h-6 text-slate-400" />
+            <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="ค้นหาชื่อลูกค้า, เบอร์โทร, หรือเลขการจอง..."
+                className="w-full text-lg outline-none placeholder:text-slate-300 text-slate-800"
+            />
+         </div>
+         <div className="bg-slate-800 rounded-3xl p-6 text-white flex items-center justify-between shadow-lg shadow-slate-200">
+            <div>
+                <div className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-1">กิจกรรมวันนี้</div>
+                <div className="text-3xl font-bold">{todayBookings.length}</div>
+            </div>
+            <div className="p-3 bg-white/10 rounded-2xl">
+                <Clock className="w-8 h-8 text-orange-400" />
+            </div>
+         </div>
       </div>
 
-      {/* Today's Activities */}
-      {todayBookings.length > 0 && (
-        <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-6">
-          <h3 className="text-neutral-900 mb-4">📅 กิจกรรมวันนี้ / Today's Activities</h3>
-          <div className="space-y-3">
-            {todayBookings.map(booking => {
-              const isCheckIn = booking.checkInDate === getTodayDateString();
-              const isCheckOut = booking.checkOutDate === getTodayDateString();
-              return (
-                <div key={booking.id} className="bg-white rounded-xl p-4 border-2 border-yellow-300">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-yellow-900">{booking.guest.name}</span>
-                      <span className="text-yellow-700 ml-3">
-                        {isCheckIn && '→ เช็คอิน'}
-                        {isCheckOut && '← เช็คเอาท์'}
-                      </span>
-                    </div>
-                    {getStatusBadge(booking.status)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Bookings List */}
-      <div className="bg-white rounded-lg border border-neutral-200 overflow-hidden">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-neutral-50 border-b border-neutral-200">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-6 py-4 text-left text-neutral-700">เลขจอง</th>
-                <th className="px-6 py-4 text-left text-neutral-700">ผู้เข้าพัก</th>
-                <th className="px-6 py-4 text-left text-neutral-700">เบอร์โทร</th>
-                <th className="px-6 py-4 text-left text-neutral-700">วันที่เข้า-ออก</th>
-                <th className="px-6 py-4 text-left text-neutral-700">ห้อง</th>
-                <th className="px-6 py-4 text-left text-neutral-700">สถานะ</th>
-                <th className="px-6 py-4 text-left text-neutral-700">จัดการ</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">เลขจอง</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ผู้เข้าพัก</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">เบอร์โทร</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">วันที่เข้า-ออก</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ห้อง</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">สถานะ</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">จัดการ</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-slate-100">
               {filteredBookings.map(booking => {
-                const bookingRooms = rooms.filter(r => booking.roomIds.includes(r.id));
-                const roomNumbers = bookingRooms.map(r => r.number).join(', ');
+                const bookingRooms = labeledRooms.filter(r => booking.roomIds.includes(r.id));
+                const roomNumbers = bookingRooms.map(r => r.label).join(', ');
                 
+                const isPool = booking.id.startsWith('POOL-');
+
                 return (
-                  <tr key={booking.id} className="hover:bg-neutral-50">
-                    <td className="px-6 py-4 text-neutral-900">{booking.id}</td>
+                  <tr key={booking.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="text-neutral-900">{booking.guest.name}</div>
+                        <span className="font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded text-xs">{booking.id}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="font-bold text-slate-800">{booking.guest.name}</div>
                       {booking.groupName && (
-                        <div className="text-sm text-neutral-500">กรุ๊ป: {booking.groupName}</div>
+                        <div className="text-xs text-purple-600 font-bold mt-1 bg-purple-50 px-2 py-0.5 rounded w-fit">
+                            {booking.groupName}
+                        </div>
+                      )}
+                      {isPool && (
+                         <div className="text-xs text-cyan-600 font-bold mt-1 bg-cyan-50 px-2 py-0.5 rounded w-fit">
+                            บริการสระว่ายน้ำ
+                        </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-neutral-600">{booking.guest.phone}</td>
-                    <td className="px-6 py-4 text-neutral-600">
-                      <div>{formatDate(booking.checkInDate)}</div>
-                      <div className="text-sm text-neutral-500">→ {formatDate(booking.checkOutDate)}</div>
+                    <td className="px-6 py-4 text-slate-500 font-medium">{booking.guest.phone}</td>
+                    <td className="px-6 py-4 text-slate-600">
+                      <div className="flex flex-col gap-1 text-sm">
+                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> {formatDate(booking.checkInDate)}</span>
+                        {isPool ? (
+                             <span className="flex items-center gap-1 opacity-50"><span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span> -</span>
+                        ) : (
+                             <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400"></span> {formatDate(booking.checkOutDate)}</span>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 text-neutral-600">{roomNumbers}</td>
+                    <td className="px-6 py-4">
+                        <span className="font-bold text-slate-800">{isPool ? '-' : roomNumbers}</span>
+                    </td>
                     <td className="px-6 py-4">{getStatusBadge(booking.status)}</td>
                     <td className="px-6 py-4">
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center">
                         {booking.status === 'reserved' && (
                           <button
                             onClick={() => handleCheckIn(booking)}
-                            className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg transition-colors text-sm"
+                            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl transition-colors text-sm font-bold shadow-sm"
                           >
                             เช็คอิน
                           </button>
@@ -458,10 +561,26 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
                         {booking.status === 'checked-in' && (
                           <button
                             onClick={() => handleCheckOut(booking)}
-                            className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg transition-colors text-sm"
+                            className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl transition-colors text-sm font-bold"
                           >
                             เช็คเอาท์
                           </button>
+                        )}
+                        {booking.status === 'checked-out' && (
+                           <span className="px-3 py-1 bg-slate-100 text-slate-400 rounded-lg text-xs font-bold">
+                              เสร็จสิ้น
+                           </span>
+                        )}
+
+                        {/* Details Button - For non-pool items mostly, but why not all? */}
+                        {!isPool && (
+                            <button
+                                onClick={() => handleShowDetails(booking)}
+                                className="p-2 hover:bg-slate-100 text-slate-400 hover:text-orange-500 rounded-xl transition-colors"
+                                title="รายละเอียด / แก้ไข"
+                            >
+                                <FileText className="w-5 h-5" />
+                            </button>
                         )}
                       </div>
                     </td>
@@ -472,21 +591,18 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
           </table>
           
           {filteredBookings.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              ไม่พบการจอง / No bookings found
+            <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+               <Search className="w-16 h-16 mb-4 opacity-20" />
+               <p className="font-medium">ไม่พบข้อมูลการจอง</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modals */}
       {showCheckIn && selectedBooking && (
         <CheckInModal
           booking={selectedBooking}
-          onClose={() => {
-            setShowCheckIn(false);
-            setSelectedBooking(null);
-          }}
+          onClose={() => setShowCheckIn(false)}
           onComplete={handleCheckInComplete}
           currentUser={currentUser}
         />
@@ -495,13 +611,19 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
       {showCheckOut && selectedBooking && (
         <CheckOutModal
           booking={selectedBooking}
-          onClose={() => {
-            setShowCheckOut(false);
-            setSelectedBooking(null);
-          }}
+          onClose={() => setShowCheckOut(false)}
           onComplete={handleCheckOutComplete}
           currentUser={currentUser}
         />
+      )}
+
+      {showDetails && selectedBooking && (
+         <BookingDetailsModal 
+            booking={selectedBooking}
+            onClose={() => setShowDetails(false)}
+            onUpdate={() => setBookings(getBookings())}
+            currentUser={currentUser}
+         />
       )}
     </div>
   );

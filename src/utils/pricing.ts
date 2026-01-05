@@ -1,6 +1,6 @@
 import { PricingTier } from '../types';
 
-// Fixed pricing tiers in THB
+// Fixed pricing tiers in THB (Inclusive of VAT 7%)
 export const PRICING = {
   general: 890,
   tour: 840,
@@ -22,13 +22,16 @@ export function calculateLateCheckOutCharge(hoursLate: number): number {
   return hoursLate * HOURLY_PENALTY;
 }
 
-export function calculateVAT(subtotal: number): number {
-  return Math.round(subtotal * VAT_RATE * 100) / 100;
+// EXTRACT VAT from Total Inclusive Price
+// VAT = Total * 7 / 107
+export function extractVAT(totalInclusive: number): number {
+  return Math.round((totalInclusive * 7 / 107) * 100) / 100;
 }
 
-export function calculateTotal(subtotal: number): number {
-  const vat = calculateVAT(subtotal);
-  return Math.round((subtotal + vat) * 100) / 100;
+// EXTRACT Base Price from Total Inclusive Price
+// Base = Total - VAT
+export function extractBasePrice(totalInclusive: number): number {
+  return Math.round((totalInclusive - extractVAT(totalInclusive)) * 100) / 100;
 }
 
 export function calculateNights(checkIn: string, checkOut: string): number {

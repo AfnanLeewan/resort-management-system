@@ -35,6 +35,7 @@ export interface Booking {
   status: 'reserved' | 'checked-in' | 'checked-out' | 'cancelled';
   groupName?: string; // For tour groups
   notes?: string;
+  additionalCharges?: Charge[];
   createdAt: string;
   createdBy: string;
 }
@@ -95,4 +96,30 @@ export interface DashboardStats {
   checkInsToday: number;
   checkOutsToday: number;
   pendingMaintenance: number;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  minLevel: number; // For reorder warnings
+}
+
+export interface InventoryTransaction {
+  id: string;
+  itemId: string;
+  itemName: string; // Cache name for history
+  date: string; // ISO String
+  type: 'in' | 'out'; // in = receive, out = issue
+  quantity: number;
+  pricePerUnit: number;
+  totalPrice: number;
+  balanceAfter: number; // Snapshot of balance
+  payer: string; // Person who paid/issued
+  receiver: string; // Person who received
+  notes?: string;
+  createdAt: string;
+  createdBy: string;
 }
