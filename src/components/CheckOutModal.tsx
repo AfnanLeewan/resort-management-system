@@ -4,7 +4,7 @@ import { updateBooking, updateRoomStatus, addPayment, getRooms, getNextReceiptNu
 import { calculateNights, calculateHoursDifference, extractVAT, extractBasePrice } from '../utils/pricing';
 import { formatCurrency, formatDateTime } from '../utils/dateHelpers';
 import { X, Printer, CreditCard, Banknote, Smartphone, Check, Clock, FileText, User as UserIcon, Building, Info } from 'lucide-react';
-import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
+import logo from "figma:asset/d3cf51ff-de67-4353-871d-03d571dccf4f.jfif";
 
 interface CheckOutModalProps {
   booking: Booking;

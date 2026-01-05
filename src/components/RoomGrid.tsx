@@ -39,7 +39,7 @@ import { format, addDays, isSameDay, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { cn } from './ui/utils';
 import { buttonVariants } from './ui/button';
-import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
+import logo from "figma:asset/d3cf51ff-de67-4353-871d-03d571dccf4f.jfif";
 
 interface RoomGridProps {
   currentUser?: User;
