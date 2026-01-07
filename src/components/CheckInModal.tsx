@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Booking, User } from '../types';
 import { updateBooking, updateRoomStatus } from '../utils/storage';
+import { getCurrentLocalDateTime } from '../utils/dateHelpers';
 import { X, User as UserIcon, Clock, CreditCard, Info } from 'lucide-react';
 
 interface CheckInModalProps {
@@ -11,7 +12,7 @@ interface CheckInModalProps {
 }
 
 export function CheckInModal({ booking, onClose, onComplete, currentUser }: CheckInModalProps) {
-  const [checkInTime, setCheckInTime] = useState(new Date().toISOString().slice(0, 16));
+  const [checkInTime, setCheckInTime] = useState(getCurrentLocalDateTime());
 
   const handleCheckIn = () => {
     // Update booking status
@@ -92,7 +93,7 @@ export function CheckInModal({ booking, onClose, onComplete, currentUser }: Chec
             />
             <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
               <Info className="w-3 h-3" />
-              หากเช็คอินก่อนเวลา 14:00 อาจมีค่าธรรมเนียมเพิ่มเติม (฿50/ชั่วโมง)
+              หากเช็คอินก่อนเวลา 14:00 อาจมีค่าธรรมเนียมเพิ่มเติม (฿50/ชม. หรือเต็มวันหากเกิน 6 ชม.)
             </p>
           </div>
 

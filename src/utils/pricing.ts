@@ -14,11 +14,17 @@ export function getBaseRate(tier: PricingTier): number {
   return PRICING[tier];
 }
 
-export function calculateEarlyCheckInCharge(hoursEarly: number): number {
+export function calculateEarlyCheckInCharge(hoursEarly: number, dailyRate: number): number {
+  if (hoursEarly > 6) {
+    return dailyRate;
+  }
   return hoursEarly * HOURLY_PENALTY;
 }
 
-export function calculateLateCheckOutCharge(hoursLate: number): number {
+export function calculateLateCheckOutCharge(hoursLate: number, dailyRate: number): number {
+  if (hoursLate > 6) {
+    return dailyRate;
+  }
   return hoursLate * HOURLY_PENALTY;
 }
 

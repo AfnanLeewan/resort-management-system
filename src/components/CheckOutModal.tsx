@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 import { Booking, User, Payment, Charge } from '../types';
 import { updateBooking, updateRoomStatus, addPayment, getRooms, getNextReceiptNumber, getNextInvoiceNumber } from '../utils/storage';
-import { calculateNights, calculateHoursDifference, extractVAT, extractBasePrice } from '../utils/pricing';
-import { formatCurrency, formatDateTime } from '../utils/dateHelpers';
+import { calculateNights, calculateHoursDifference, extractVAT, extractBasePrice, calculateEarlyCheckInCharge, calculateLateCheckOutCharge } from '../utils/pricing';
+import { formatCurrency, formatDateTime, getCurrentLocalDateTime } from '../utils/dateHelpers';
 import { X, Printer, CreditCard, Banknote, Smartphone, Check, Clock, FileText, User as UserIcon, Building, Info } from 'lucide-react';
-import logo from "figma:asset/d3cf51ff-de67-4353-871d-03d571dccf4f.jfif";
+import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
 
 interface CheckOutModalProps {
   booking: Booking;
@@ -14,7 +14,7 @@ interface CheckOutModalProps {
 }
 
 export function CheckOutModal({ booking, onClose, onComplete, currentUser }: CheckOutModalProps) {
-  const [checkOutTime, setCheckOutTime] = useState(new Date().toISOString().slice(0, 16));
+  const [checkOutTime, setCheckOutTime] = useState(getCurrentLocalDateTime());
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'qr'>('cash');
   const [discount, setDiscount] = useState(0);
   const [discountReason, setDiscountReason] = useState('');
@@ -49,12 +49,17 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
       if (actualCheckIn < scheduledCheckIn) {
         const hoursEarly = calculateHoursDifference(booking.actualCheckInTime, scheduledCheckIn.toISOString());
         if (hoursEarly > 0) {
+          const amount = calculateEarlyCheckInCharge(hoursEarly, booking.baseRate);
+          const description = hoursEarly > 6 
+            ? `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง (คิดเต็มวัน)`
+            : `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง @ ฿50/ชม.`;
+
           chargeList.push({
             id: `charge-early-checkin`,
             bookingId: booking.id,
             type: 'early-checkin',
-            description: `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง @ ฿50/ชม.`,
-            amount: hoursEarly * 50,
+            description,
+            amount,
           });
         }
       }
@@ -66,12 +71,17 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
     if (actualCheckOut > scheduledCheckOut) {
       const hoursLate = calculateHoursDifference(scheduledCheckOut.toISOString(), checkOutTime);
       if (hoursLate > 0) {
+        const amount = calculateLateCheckOutCharge(hoursLate, booking.baseRate);
+        const description = hoursLate > 6
+            ? `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง (คิดเต็มวัน)`
+            : `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง @ ฿50/ชม.`;
+
         chargeList.push({
           id: `charge-late-checkout`,
           bookingId: booking.id,
           type: 'late-checkout',
-          description: `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง @ ฿50/ชม.`,
-          amount: hoursLate * 50,
+          description,
+          amount,
         });
       }
     }
@@ -366,7 +376,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
               />
               <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
                 <Info className="w-3 h-3" />
-                เช็คเอาท์หลัง 12:00 น. มีค่าธรรมเนียม ฿50/ชั่วโมง
+                เช็คเอาท์หลัง 12:00 น. มีค่าธรรมเนียม ฿50/ชม. (เกิน 6 ชม. คิดเต็มวัน)
               </p>
             </div>
           </div>

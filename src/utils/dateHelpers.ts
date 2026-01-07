@@ -49,3 +49,9 @@ export function isThisMonth(date: string): boolean {
   const today = new Date();
   return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
 }
+
+export function getCurrentLocalDateTime(): string {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().slice(0, 16);
+}

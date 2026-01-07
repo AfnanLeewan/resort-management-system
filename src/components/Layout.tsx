@@ -17,7 +17,7 @@ import {
   Package
 } from 'lucide-react';
 import { QuickGuide } from './QuickGuide';
-import logo from "figma:asset/d3cf51ff-de67-4353-871d-03d571dccf4f.jfif";
+import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
 
 interface LayoutProps {
   children: ReactNode;
