@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Booking, Charge, User } from '../types';
 import { updateBooking } from '../utils/storage';
-import { X, Save, Plus, Trash2, FileText, User as UserIcon, Phone, CreditCard, ShoppingBag } from 'lucide-react';
+import { X, Save, Plus, Trash2, FileText, User as UserIcon, Phone, CreditCard, ShoppingBag, MapPin, Banknote } from 'lucide-react';
 import { formatCurrency } from '../utils/dateHelpers';
 
 interface BookingDetailsModalProps {
@@ -15,6 +15,8 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
   const [guestName, setGuestName] = useState(booking.guest.name);
   const [phone, setPhone] = useState(booking.guest.phone);
   const [idNumber, setIdNumber] = useState(booking.guest.idNumber);
+  const [address, setAddress] = useState(booking.guest.address || '');
+  const [deposit, setDeposit] = useState(booking.deposit?.toString() || '');
   const [notes, setNotes] = useState(booking.notes || '');
   
   const [additionalCharges, setAdditionalCharges] = useState<Charge[]>(booking.additionalCharges || []);
@@ -78,7 +80,9 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
         name: guestName,
         phone: phone,
         idNumber: idNumber,
+        address: address,
       },
+      deposit: deposit ? parseFloat(deposit) : 0,
       notes: notes,
       additionalCharges: additionalCharges
     });
@@ -142,6 +146,31 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
                       value={idNumber}
                       onChange={(e) => setIdNumber(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 outline-none bg-white"
+                    />
+                  </div>
+               </div>
+               <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">ที่อยู่</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input 
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 outline-none bg-white"
+                    />
+                  </div>
+               </div>
+               <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">เงินมัดจำ</label>
+                  <div className="relative">
+                    <Banknote className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input 
+                      type="number"
+                      min="0"
+                      value={deposit}
+                      onChange={(e) => setDeposit(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 outline-none bg-white font-mono font-bold text-slate-700"
+                      placeholder="0.00"
                     />
                   </div>
                </div>

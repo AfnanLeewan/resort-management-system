@@ -26,6 +26,8 @@ import {
   Printer,
   MessageCircle,
   Smartphone,
+  MapPin,
+  Banknote,
   ArrowLeft,
   Waves
 } from 'lucide-react';
@@ -237,7 +239,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                 </div>
                 <div>
                     <h2 className="text-lg font-bold text-slate-800">ตรวจสอบสถานะห้องพัก</h2>
-                    <p className="text-slate-500 text-sm">เลือกวันที่เพื่อดูการจองล่วงหน้า</p>
+                    <p className="text-slate-500 text-sm">เลือกวันที่เพื่อดูการจอง���่วงหน้า</p>
                 </div>
              </div>
              
@@ -887,8 +889,10 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
   const [formData, setFormData] = useState({
     guestName: '',
     idNumber: '',
+    address: '',
     phone: '',
     whatsapp: '',
+    deposit: '',
     groupName: '',
     checkInDate: initialDate || getTodayDateString(),
     checkOutDate: '',
@@ -909,12 +913,14 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
       guest: { 
           name: formData.guestName, 
           idNumber: formData.idNumber || '-', 
-          phone: formData.phone 
+          phone: formData.phone,
+          address: formData.address || undefined,
       },
       checkInDate: formData.checkInDate,
       checkOutDate: formData.checkOutDate,
       pricingTier: isGroup ? 'tour' : 'general', // Auto set tour tier for groups?
       baseRate: isGroup ? PRICING['tour'] * rooms.length : PRICING['general'], // Simple calc
+      deposit: formData.deposit ? parseFloat(formData.deposit) : 0,
       source: 'walk-in',
       status: 'reserved',
       groupName: formData.groupName || undefined,
@@ -999,6 +1005,19 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
                 </div>
              </div>
 
+             <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">ที่อยู่ (Address)</label>
+                <div className="relative">
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input 
+                    className="w-full p-4 pl-12 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
+                    value={formData.address}
+                    onChange={e => setFormData({...formData, address: e.target.value})}
+                    placeholder="บ้านเลขที่, ถนน, ตำบล, อำเภอ, จังหวัด"
+                    />
+                </div>
+             </div>
+
              <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">เบอร์โทรศัพท์</label>
@@ -1026,6 +1045,21 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
                         placeholder="+66..."
                         />
                     </div>
+                </div>
+             </div>
+
+             <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">เงินมัดจำ (Deposit)</label>
+                <div className="relative">
+                    <Banknote className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input 
+                    type="number"
+                    min="0"
+                    className="w-full p-4 pl-12 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all font-mono font-bold text-lg text-slate-800"
+                    value={formData.deposit}
+                    onChange={e => setFormData({...formData, deposit: e.target.value})}
+                    placeholder="0.00"
+                    />
                 </div>
              </div>
 

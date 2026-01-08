@@ -18,6 +18,8 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'qr'>('cash');
   const [discount, setDiscount] = useState(0);
   const [discountReason, setDiscountReason] = useState('');
+  const [penalty, setPenalty] = useState(0);
+  const [penaltyReason, setPenaltyReason] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [receipt, setReceipt] = useState<Payment | null>(null);
 
@@ -91,6 +93,28 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         chargeList.push(...booking.additionalCharges);
     }
 
+    // Deposit Deduction
+    if (booking.deposit && booking.deposit > 0) {
+      chargeList.push({
+        id: `charge-deposit`,
+        bookingId: booking.id,
+        type: 'other',
+        description: `หักเงินมัดจำ (Deposit)`,
+        amount: -booking.deposit,
+      });
+    }
+
+    // Penalty (Adjustable)
+    if (penalty > 0) {
+      chargeList.push({
+        id: `charge-penalty-${Date.now()}`,
+        bookingId: booking.id,
+        type: 'other',
+        description: `ค่าปรับ/เสียหาย: ${penaltyReason || 'ไม่ระบุ'}`,
+        amount: penalty,
+      });
+    }
+
     // Discount
     if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management')) {
       chargeList.push({
@@ -104,7 +128,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
     }
 
     return chargeList;
-  }, [booking, rooms, checkOutTime, discount, discountReason, currentUser]);
+  }, [booking, rooms, checkOutTime, discount, discountReason, penalty, penaltyReason, currentUser]);
 
   // Total is the sum of charges (Inclusive of VAT)
   const total = useMemo(() => {
@@ -405,7 +429,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                         <td className="py-3 text-slate-800 text-right font-mono pt-4">{formatCurrency(subtotal)}</td>
                     </tr>
                     <tr>
-                        <td className="py-3 text-slate-500 text-right text-sm">VAT 7% (รวมในราคาแล้ว)</td>
+                        <td className="py-3 text-slate-500 text-right text-sm">VAT 7% (รวม��นราคาแล้ว)</td>
                         <td className="py-3 text-slate-800 text-right font-mono">{formatCurrency(vat)}</td>
                     </tr>
                     <tr className="border-t border-slate-100">
@@ -447,6 +471,35 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                </div>
             </div>
           )}
+
+          {/* Penalty Section */}
+          <div className="bg-red-50/50 border border-red-200 rounded-2xl p-6">
+               <h3 className="text-red-800 font-bold mb-4 flex items-center gap-2">
+                  ⚠️ ค่าปรับ / ความเสียหาย
+               </h3>
+               <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-red-800 text-xs font-bold uppercase tracking-wider mb-1">จำนวนเงิน (บาท)</label>
+                    <input
+                        type="number"
+                        min="0"
+                        value={penalty}
+                        onChange={(e) => setPenalty(parseFloat(e.target.value) || 0)}
+                        className="w-full px-4 py-3 border border-red-200 rounded-xl focus:border-red-500 outline-none bg-white text-red-900 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-red-800 text-xs font-bold uppercase tracking-wider mb-1">เหตุผล</label>
+                    <input
+                        type="text"
+                        value={penaltyReason}
+                        onChange={(e) => setPenaltyReason(e.target.value)}
+                        className="w-full px-4 py-3 border border-red-200 rounded-xl focus:border-red-500 outline-none bg-white text-red-900"
+                        placeholder="เช่น ทำแก้วแตก, กุญแจหาย"
+                    />
+                  </div>
+               </div>
+          </div>
 
           {/* Payment Method Selection */}
           <div>

@@ -5,7 +5,7 @@ export type RoomStatus = 'available' | 'occupied' | 'cleaning' | 'maintenance';
 export type BookingSource = 'walk-in' | 'phone' | 'ota';
 export type PricingTier = 'general' | 'tour' | 'vip';
 export type PaymentMethod = 'cash' | 'transfer' | 'qr';
-export type UserRole = 'front-desk' | 'housekeeping' | 'management' | 'board';
+export type UserRole = 'front-desk' | 'housekeeping' | 'management' | 'board' | 'part-time';
 
 export interface Room {
   id: string;
@@ -19,6 +19,7 @@ export interface Guest {
   name: string;
   idNumber: string; // ID Card or Passport
   phone: string;
+  address?: string;
 }
 
 export interface Booking {
@@ -31,6 +32,7 @@ export interface Booking {
   actualCheckOutTime?: string;
   pricingTier: PricingTier;
   baseRate: number;
+  deposit?: number;
   source: BookingSource;
   status: 'reserved' | 'checked-in' | 'checked-out' | 'cancelled';
   groupName?: string; // For tour groups
@@ -76,12 +78,34 @@ export interface MaintenanceReport {
   photos?: string[];
 }
 
+export interface WorkShift {
+  day: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
+  start: string; // "08:00"
+  end: string;   // "17:00"
+}
+
 export interface User {
   id: string;
   username: string;
   name: string;
   role: UserRole;
   phone?: string;
+  photoUrl?: string;
+  status: 'on-duty' | 'off-duty' | 'on-leave';
+  lastCheckIn?: string;
+  lastCheckOut?: string;
+  shifts?: WorkShift[];
+  isOnline?: boolean;
+}
+
+export interface AttendanceRecord {
+  id: string;
+  userId: string;
+  type: 'check-in' | 'check-out' | 'leave';
+  timestamp: string;
+  note?: string;
+  leaveReason?: string;
+  leaveDate?: string; // For leave records that might be for a future/past date
 }
 
 export interface DashboardStats {

@@ -6,7 +6,8 @@ import {
   User,
   RoomType,
   InventoryItem,
-  InventoryTransaction
+  InventoryTransaction,
+  AttendanceRecord
 } from "../types";
 
 const STORAGE_KEYS = {
@@ -16,6 +17,7 @@ const STORAGE_KEYS = {
   MAINTENANCE: "rrms_maintenance",
   USERS: "rrms_users",
   CURRENT_USER: "rrms_current_user",
+  ATTENDANCE: "rrms_attendance",
   RECEIPT_COUNTER: "rrms_receipt_counter",
   INVOICE_COUNTER: "rrms_invoice_counter",
   INVENTORY_ITEMS: "rrms_inventory_items",
@@ -58,6 +60,10 @@ export function initializeUsers(): User[] {
       name: "Front Desk",
       role: "front-desk",
       phone: "081-234-5678",
+      photoUrl: "figma:asset/bdc67e81075d656093375b06f582f3c7e7c85848.png",
+      status: 'on-duty',
+      isOnline: true,
+      shifts: [{ day: 'Mon', start: '08:00', end: '17:00' }, { day: 'Tue', start: '08:00', end: '17:00' }, { day: 'Wed', start: '08:00', end: '17:00' }, { day: 'Thu', start: '08:00', end: '17:00' }, { day: 'Fri', start: '08:00', end: '17:00' }]
     },
     {
       id: "user-2",
@@ -65,6 +71,10 @@ export function initializeUsers(): User[] {
       name: "Housekeeping",
       role: "housekeeping",
       phone: "081-234-5679",
+      photoUrl: "figma:asset/d8d21c028238122393306637841c2d0f5e135b80.png",
+      status: 'off-duty',
+      isOnline: false,
+      shifts: [{ day: 'Wed', start: '09:00', end: '18:00' }, { day: 'Thu', start: '09:00', end: '18:00' }, { day: 'Fri', start: '09:00', end: '18:00' }, { day: 'Sat', start: '09:00', end: '18:00' }, { day: 'Sun', start: '09:00', end: '18:00' }]
     },
     {
       id: "user-3",
@@ -72,6 +82,9 @@ export function initializeUsers(): User[] {
       name: "Manager",
       role: "management",
       phone: "081-234-5680",
+      photoUrl: "figma:asset/547f385c742353a8105658e8071e687103288a78.png",
+      status: 'on-duty',
+      isOnline: true,
     },
     {
       id: "user-4",
@@ -79,6 +92,8 @@ export function initializeUsers(): User[] {
       name: "Board Director",
       role: "board",
       phone: "081-234-5681",
+      status: 'off-duty',
+      isOnline: false,
     },
   ];
 }
@@ -219,6 +234,31 @@ export function getUsers(): User[] {
   return users;
 }
 
+export function saveUsers(users: User[]): void {
+  saveToStorage(STORAGE_KEYS.USERS, users);
+}
+
+export function addUser(user: User): void {
+  const users = getUsers();
+  users.push(user);
+  saveUsers(users);
+}
+
+export function updateUser(id: string, updates: Partial<User>): void {
+  const users = getUsers();
+  const index = users.findIndex(u => u.id === id);
+  if (index !== -1) {
+    users[index] = { ...users[index], ...updates };
+    saveUsers(users);
+  }
+}
+
+export function deleteUser(id: string): void {
+  const users = getUsers();
+  const newUsers = users.filter(u => u.id !== id);
+  saveUsers(newUsers);
+}
+
 export function getCurrentUser(): User | null {
   return loadFromStorage<User | null>(
     STORAGE_KEYS.CURRENT_USER,
@@ -228,6 +268,81 @@ export function getCurrentUser(): User | null {
 
 export function setCurrentUser(user: User | null): void {
   saveToStorage(STORAGE_KEYS.CURRENT_USER, user);
+}
+
+// Attendance operations
+export function getAttendanceRecords(): AttendanceRecord[] {
+  return loadFromStorage<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
+}
+
+export function saveAttendanceRecords(records: AttendanceRecord[]): void {
+  saveToStorage(STORAGE_KEYS.ATTENDANCE, records);
+}
+
+export function addAttendanceRecord(record: AttendanceRecord): void {
+  const records = getAttendanceRecords();
+  records.push(record);
+  saveAttendanceRecords(records);
+}
+
+// Helper to clock in/out a user
+export function toggleUserAttendance(userId: string, type: 'check-in' | 'check-out'): void {
+  const users = getUsers();
+  const user = users.find(u => u.id === userId);
+  
+  if (user) {
+    const timestamp = new Date().toISOString();
+    
+    // Update user status
+    user.status = type === 'check-in' ? 'on-duty' : 'off-duty';
+    if (type === 'check-in') {
+      user.lastCheckIn = timestamp;
+      user.isOnline = true; // Auto set online when checking in
+    } else {
+      user.lastCheckOut = timestamp;
+      user.isOnline = false; // Auto set offline when checking out (optional, but makes sense)
+    }
+    
+    saveUsers(users);
+
+    // Add record
+    addAttendanceRecord({
+      id: `ATT-${Date.now()}`,
+      userId,
+      type,
+      timestamp,
+    });
+  }
+}
+
+export function recordLeave(userId: string, date: string, reason: string): void {
+    const users = getUsers();
+    const user = users.find(u => u.id === userId);
+    
+    if (user) {
+        // We might want to update status if the leave is TODAY, but for now just record it
+        // user.status = 'on-leave'; 
+        // saveUsers(users);
+
+        addAttendanceRecord({
+            id: `ATT-LEAVE-${Date.now()}`,
+            userId,
+            type: 'leave',
+            timestamp: new Date().toISOString(), // Record creation time
+            leaveDate: date, // The actual leave date
+            leaveReason: reason,
+            note: reason
+        });
+    }
+}
+
+export function toggleUserOnlineStatus(userId: string): void {
+  const users = getUsers();
+  const user = users.find(u => u.id === userId);
+  if (user) {
+    user.isOnline = !user.isOnline;
+    saveUsers(users);
+  }
 }
 
 // Receipt and Invoice counters
