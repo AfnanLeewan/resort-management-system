@@ -80,3 +80,4 @@ CREATE TRIGGER update_inventory_items_updated_at
 
 -- 9. Force Supabase to refresh its schema cache
 NOTIFY pgrst, 'reload schema';
+D

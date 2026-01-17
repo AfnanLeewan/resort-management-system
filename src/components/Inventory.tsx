@@ -426,18 +426,20 @@ export function Inventory({ currentUser }: InventoryProps) {
                         <label className="block text-slate-700 font-bold mb-2">จำนวนเริ่มต้น</label>
                         <input 
                         type="number"
-                        value={newItem.quantity}
+                        value={newItem.quantity || ''}
                         onChange={e => setNewItem({...newItem, quantity: parseInt(e.target.value) || 0})}
                         className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 outline-none"
+                        placeholder="0"
                         />
                     </div>
                     <div>
                         <label className="block text-slate-700 font-bold mb-2">แจ้งเตือนเมื่อต่ำกว่า</label>
                         <input 
                         type="number"
-                        value={newItem.minLevel}
+                        value={newItem.minLevel || ''}
                         onChange={e => setNewItem({...newItem, minLevel: parseInt(e.target.value) || 0})}
                         className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 outline-none"
+                        placeholder="0"
                         />
                     </div>
                  </div>
