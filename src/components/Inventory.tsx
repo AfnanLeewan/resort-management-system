@@ -522,22 +522,24 @@ export function Inventory({ currentUser }: InventoryProps) {
                         <input 
                             type="number"
                             min="1"
-                            value={newTransaction.quantity}
+                            value={newTransaction.quantity || ''}
                             onChange={e => setNewTransaction({...newTransaction, quantity: parseInt(e.target.value) || 0})}
                             className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 outline-none font-mono text-lg"
+                            placeholder="0"
                         />
                      </div>
                      {newTransaction.type === 'in' && (
                         <div>
                             <label className="block text-slate-700 font-bold mb-2">ราคาต่อหน่วย (บาท)</label>
                             <div className="relative">
-                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">฿</span>
                                 <input 
                                     type="number"
                                     min="0"
-                                    value={newTransaction.pricePerUnit}
+                                    value={newTransaction.pricePerUnit || ''}
                                     onChange={e => setNewTransaction({...newTransaction, pricePerUnit: parseFloat(e.target.value) || 0})}
                                     className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:border-orange-500 outline-none"
+                                    placeholder="0.00"
                                 />
                             </div>
                         </div>
