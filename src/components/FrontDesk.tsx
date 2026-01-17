@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Booking, Room, User } from '../types';
+import { Booking, Room, User, Payment } from '../types';
 import * as api from '../utils/api';
 import { getTodayDateString, formatDate, formatDateTime, formatCurrency } from '../utils/dateHelpers';
 import { PRICING, extractBasePrice, extractVAT } from '../utils/pricing';
@@ -7,9 +7,10 @@ import { Plus, Search, Calendar as CalendarIcon, Users, Phone, CreditCard, Arrow
 import { CheckInModal } from './CheckInModal';
 import { CheckOutModal } from './CheckOutModal';
 import { BookingDetailsModal } from './BookingDetailsModal';
+import { ReceiptModal } from './ReceiptModal';
 import { Calendar } from './ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { cn } from './ui/utils';
 
@@ -25,11 +26,13 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   
   // Modal States
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showCheckOut, setShowCheckOut] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
 
   // New booking form state
   const [newBooking, setNewBooking] = useState({
@@ -37,7 +40,7 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     idNumber: '',
     phone: '',
     checkInDate: getTodayDateString(),
-    checkOutDate: '',
+    checkOutDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
     roomType: 'single' as 'single' | 'double',
     selectedRoomIds: [] as string[],
     pricingTier: 'general' as 'general' | 'tour' | 'vip',
@@ -171,6 +174,25 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     setShowDetails(true);
   };
 
+  const handleShowReceipt = async (booking: Booking) => {
+    try {
+      setLoading(true);
+      const payment = await api.getPaymentByBookingId(booking.id);
+      if (payment) {
+        setSelectedPayment(payment);
+        setSelectedBooking(booking);
+        setShowReceipt(true);
+      } else {
+        alert('ไม่พบข้อมูลการชำระเงิน / Payment record not found');
+      }
+    } catch (err) {
+      console.error('Failed to load receipt:', err);
+      alert('เกิดข้อผิดพลาดในการโหลดใบเสร็จ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCheckInComplete = async () => {
     setShowCheckIn(false);
     setSelectedBooking(null);
@@ -214,7 +236,41 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     );
   };
 
-  const filteredAvailableLabeledRooms = labeledRooms.filter(r => r.status === 'available' && r.type === newBooking.roomType);
+  const filteredAvailableLabeledRooms = useMemo(() => {
+    // If dates are invalid, default to 1 night stay (or return empty if preferred, but listing available is better)
+    const startStr = newBooking.checkInDate || getTodayDateString();
+    const endStr = newBooking.checkOutDate || format(addDays(new Date(startStr), 1), 'yyyy-MM-dd');
+
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    const isToday = startStr === getTodayDateString();
+
+    return labeledRooms.filter(room => {
+      // 1. Check Type
+      if (room.type !== newBooking.roomType) return false;
+
+      // 2. Check Static Status
+      // If Checking In TODAY: Block cleaning & maintenance
+      // If Future: Block maintenance (assuming maintenance is long term or unspecified)
+      // Note: 'occupied' status is ignored here because we rely on specific booking dates below
+      if (room.status === 'maintenance') return false;
+      if (isToday && room.status === 'cleaning') return false;
+
+      // 3. Check Booking Overlaps
+      const isBooked = bookings.some(b => {
+        if (b.status === 'cancelled' || b.status === 'checked-out') return false;
+        if (!b.roomIds.includes(room.id)) return false;
+
+        const bStart = new Date(b.checkInDate);
+        const bEnd = new Date(b.checkOutDate);
+        
+        // Overlap: StartA < EndB && EndA > StartB
+        return bStart < end && bEnd > start;
+      });
+
+      return !isBooked;
+    });
+  }, [labeledRooms, bookings, newBooking.checkInDate, newBooking.checkOutDate, newBooking.roomType]);
 
   if (view === 'new-booking') {
     return (
@@ -605,11 +661,16 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
                         {/* Details Button - For non-pool items mostly, but why not all? */}
                         {!isPool && (
                             <button
-                                onClick={() => handleShowDetails(booking)}
-                                className="p-2 hover:bg-slate-100 text-slate-400 hover:text-orange-500 rounded-xl transition-colors"
-                                title="รายละเอียด / แก้ไข"
+                                onClick={() => booking.status === 'checked-out' ? handleShowReceipt(booking) : handleShowDetails(booking)}
+                                className={cn(
+                                  "p-2 rounded-xl transition-colors",
+                                  booking.status === 'checked-out' 
+                                    ? "hover:bg-green-50 text-slate-400 hover:text-green-600" 
+                                    : "hover:bg-slate-100 text-slate-400 hover:text-orange-500"
+                                )}
+                                title={booking.status === 'checked-out' ? "ดูใบเสร็จ / View Receipt" : "รายละเอียด / แก้ไข"}
                             >
-                                <FileText className="w-5 h-5" />
+                                <FileText className={cn("w-5 h-5", booking.status === 'checked-out' && "text-slate-500")} />
                             </button>
                         )}
                       </div>
@@ -654,6 +715,15 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
             onUpdate={() => loadData()}
             currentUser={currentUser}
          />
+      )}
+
+      {showReceipt && selectedBooking && selectedPayment && (
+        <ReceiptModal
+          booking={selectedBooking}
+          payment={selectedPayment}
+          roomNumbers={labeledRooms.filter(r => selectedBooking.roomIds.includes(r.id)).map(r => r.label).join(', ')}
+          onClose={() => setShowReceipt(false)}
+        />
       )}
     </div>
   );

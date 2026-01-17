@@ -523,6 +523,43 @@ export async function getPayments(): Promise<Payment[]> {
   });
 }
 
+export async function getPaymentByBookingId(bookingId: string): Promise<Payment | null> {
+  if (isInDemoMode || !supabase) {
+    const payments = localStorage.getPayments();
+    return payments.find(p => p.bookingId === bookingId) || null;
+  }
+
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching payment by booking ID:', error);
+    return null;
+  }
+
+  if (!data) return null;
+  
+  // Fetch charges
+  const { data: chargesData } = await supabase
+    .from('charges')
+    .select('*')
+    .eq('booking_id', bookingId);
+
+   const charges = (chargesData || []).map(c => ({
+        id: c.id,
+        bookingId: c.booking_id,
+        type: c.type as Charge['type'],
+        description: c.description,
+        amount: Number(c.amount),
+        authorizedBy: c.authorized_by || undefined,
+      }));
+
+  return mapPaymentFromDB(data, charges);
+}
+
 export async function addPayment(payment: Payment): Promise<void> {
   if (isInDemoMode || !supabase) {
     localStorage.addPayment(payment);
