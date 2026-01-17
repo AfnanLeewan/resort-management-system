@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
-import { User } from '../types';
-import { getBookings, getPayments, getRooms, exportToCSV } from '../utils/storage';
+import { useState, useMemo, useEffect } from 'react';
+import { User, Booking, Payment, Room } from '../types';
+import * as api from '../utils/api';
 import { formatCurrency, formatDateTime } from '../utils/dateHelpers';
-import { Download, FileText, DollarSign, TrendingUp, Calendar, Printer, CreditCard, Banknote, Smartphone, Building, Info } from 'lucide-react';
+import { Download, FileText, DollarSign, TrendingUp, Calendar, Printer, CreditCard, Banknote, Smartphone, Building, Info, Loader2 } from 'lucide-react';
 
 interface ReportsProps {
   currentUser: User;
@@ -10,10 +10,32 @@ interface ReportsProps {
 
 export function Reports({ currentUser }: ReportsProps) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  
-  const bookings = getBookings();
-  const payments = getPayments();
-  const rooms = getRooms();
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+
+  // Load data on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [loadedBookings, loadedPayments, loadedRooms] = await Promise.all([
+          api.getBookings(),
+          api.getPayments(),
+          api.getRooms(),
+        ]);
+        setBookings(loadedBookings);
+        setPayments(loadedPayments);
+        setRooms(loadedRooms);
+      } catch (err) {
+        console.error('Failed to load reports data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   // Filter payments by selected month
   const monthPayments = useMemo(() => {
@@ -75,17 +97,25 @@ export function Reports({ currentUser }: ReportsProps) {
     };
   }, [monthPayments, bookings]);
 
-  const handleExportCSV = () => {
-    const csv = exportToCSV();
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `royyan-resort-report-${selectedMonth}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleExportCSV = async () => {
+    setExporting(true);
+    try {
+      const csv = await api.exportToCSV();
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `royyan-resort-report-${selectedMonth}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Failed to export CSV:', err);
+      alert('ไม่สามารถส่งออกข้อมูลได้ / Export failed');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handlePrint = () => {

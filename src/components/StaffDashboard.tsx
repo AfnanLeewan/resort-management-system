@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { User, UserRole, AttendanceRecord } from '../types';
-import { getUsers, addUser, updateUser, deleteUser, toggleUserAttendance, toggleUserOnlineStatus, getAttendanceRecords, recordLeave } from '../utils/storage';
+import * as api from '../utils/api';
 import { 
   Users, 
   UserPlus, 
@@ -19,7 +19,8 @@ import {
   Upload,
   History,
   FileText,
-  Search
+  Search,
+  Loader2
 } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { format, parseISO } from 'date-fns';
@@ -37,6 +38,7 @@ import { Badge } from "./ui/badge";
 
 export function StaffDashboard() {
   const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -52,23 +54,30 @@ export function StaffDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const loadData = () => {
-    setUsers(getUsers());
+  const loadData = async () => {
+    try {
+      const loadedUsers = await api.getUsers();
+      setUsers(loadedUsers);
+    } catch (err) {
+      console.error('Failed to load users:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleStatusToggle = (userId: string) => {
-    toggleUserOnlineStatus(userId);
+  const handleStatusToggle = async (userId: string) => {
+    await api.toggleUserOnlineStatus(userId);
     loadData();
   };
 
-  const handleAttendance = (userId: string, type: 'check-in' | 'check-out') => {
-    toggleUserAttendance(userId, type);
+  const handleAttendance = async (userId: string, type: 'check-in' | 'check-out') => {
+    await api.toggleUserAttendance(userId, type);
     loadData();
   };
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     if (confirm('คุณแน่ใจหรือไม่ที่จะลบพนักงานคนนี้? การกระทำนี้ไม่สามารถย้อนกลับได้')) {
-        deleteUser(userId);
+        await api.deleteUser(userId);
         loadData();
     }
   };
@@ -211,8 +220,11 @@ function AttendanceHistory({ users }: { users: User[] }) {
     
     useEffect(() => {
         // Load records
-        const allRecords = getAttendanceRecords().sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setRecords(allRecords);
+        const loadRecords = async () => {
+            const allRecords = await api.getAttendanceRecords();
+            setRecords(allRecords.sort((a: AttendanceRecord, b: AttendanceRecord) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+        };
+        loadRecords();
     }, [users]); // Reload if users change (e.g. status update)
 
     const filteredRecords = records.filter(record => {
@@ -308,9 +320,9 @@ function LeaveModal({ users, onClose, onSuccess }: { users: User[], onClose: () 
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [reason, setReason] = useState('');
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        recordLeave(userId, date, reason);
+        await api.recordLeave(userId, date, reason);
         onSuccess();
     };
 
@@ -571,10 +583,10 @@ function StaffModal({ user, onClose, onSuccess }: { user: User | null, onClose: 
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        const defaultShifts = [
+        const defaultShifts: Array<{day: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun', start: string, end: string}> = [
             { day: 'Mon', start: formData.shiftStart, end: formData.shiftEnd },
             { day: 'Tue', start: formData.shiftStart, end: formData.shiftEnd },
             { day: 'Wed', start: formData.shiftStart, end: formData.shiftEnd },
@@ -584,7 +596,7 @@ function StaffModal({ user, onClose, onSuccess }: { user: User | null, onClose: 
 
         try {
             if (isEditMode && user) {
-                updateUser(user.id, {
+                await api.updateUser(user.id, {
                     name: formData.name,
                     role: formData.role,
                     phone: formData.phone,
@@ -602,7 +614,7 @@ function StaffModal({ user, onClose, onSuccess }: { user: User | null, onClose: 
                     status: 'off-duty',
                     shifts: defaultShifts
                 };
-                addUser(newUser);
+                await api.addUser(newUser);
             }
             onSuccess();
         } catch (error) {

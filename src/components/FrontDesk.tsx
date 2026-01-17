@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Booking, Room, User } from '../types';
-import { getRooms, getBookings, addBooking, updateBooking, updateRoomStatus } from '../utils/storage';
+import * as api from '../utils/api';
 import { getTodayDateString, formatDate, formatDateTime, formatCurrency } from '../utils/dateHelpers';
 import { PRICING, extractBasePrice, extractVAT } from '../utils/pricing';
-import { Plus, Search, Calendar as CalendarIcon, Users, Phone, CreditCard, ArrowLeft, User as UserIcon, CalendarDays, BedDouble, Info, CheckCircle2, Clock, Check, FileText } from 'lucide-react';
+import { Plus, Search, Calendar as CalendarIcon, Users, Phone, CreditCard, ArrowLeft, User as UserIcon, CalendarDays, BedDouble, Info, CheckCircle2, Clock, Check, FileText, Loader2 } from 'lucide-react';
 import { CheckInModal } from './CheckInModal';
 import { CheckOutModal } from './CheckOutModal';
 import { BookingDetailsModal } from './BookingDetailsModal';
@@ -19,7 +19,10 @@ interface FrontDeskProps {
 
 export function FrontDesk({ currentUser }: FrontDeskProps) {
   const [view, setView] = useState<'list' | 'new-booking'>('list');
-  const [bookings, setBookings] = useState<Booking[]>(getBookings());
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   
@@ -43,7 +46,26 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     notes: '',
   });
 
-  const rooms = getRooms();
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [loadedBookings, loadedRooms] = await Promise.all([
+        api.getBookings(),
+        api.getRooms(),
+      ]);
+      setBookings(loadedBookings);
+      setRooms(loadedRooms);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const availableRooms = rooms.filter(r => r.status === 'available');
 
   // Logic for sorting and labeling rooms (Same as RoomGrid)
@@ -74,7 +96,7 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     );
   }, [filteredBookings]);
 
-  const handleCreateBooking = () => {
+  const handleCreateBooking = async () => {
     if (!newBooking.guestName || !newBooking.idNumber || !newBooking.phone || !newBooking.checkOutDate) {
       alert('กรุณากรอกข้อมูลให้ครบถ้วน / Please fill all required fields');
       return;
@@ -85,45 +107,53 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
         return;
     }
 
-    const booking: Booking = {
-      id: `BK${Date.now()}`,
-      roomIds: newBooking.selectedRoomIds,
-      guest: {
-        name: newBooking.guestName,
-        idNumber: newBooking.idNumber,
-        phone: newBooking.phone,
-      },
-      checkInDate: newBooking.checkInDate,
-      checkOutDate: newBooking.checkOutDate,
-      pricingTier: newBooking.pricingTier,
-      baseRate: PRICING[newBooking.pricingTier],
-      source: newBooking.source,
-      status: 'reserved',
-      groupName: newBooking.groupName || undefined,
-      notes: newBooking.notes || undefined,
-      createdAt: new Date().toISOString(),
-      createdBy: currentUser.id,
-    };
+    setSaving(true);
+    try {
+      const booking: Booking = {
+        id: `BK${Date.now()}`,
+        roomIds: newBooking.selectedRoomIds,
+        guest: {
+          name: newBooking.guestName,
+          idNumber: newBooking.idNumber,
+          phone: newBooking.phone,
+        },
+        checkInDate: newBooking.checkInDate,
+        checkOutDate: newBooking.checkOutDate,
+        pricingTier: newBooking.pricingTier,
+        baseRate: PRICING[newBooking.pricingTier],
+        source: newBooking.source,
+        status: 'reserved',
+        groupName: newBooking.groupName || undefined,
+        notes: newBooking.notes || undefined,
+        createdAt: new Date().toISOString(),
+        createdBy: currentUser.id,
+      };
 
-    addBooking(booking);
-    setBookings(getBookings());
-    
-    setNewBooking({
-      guestName: '',
-      idNumber: '',
-      phone: '',
-      checkInDate: getTodayDateString(),
-      checkOutDate: '',
-      roomType: 'single',
-      selectedRoomIds: [],
-      pricingTier: 'general',
-      source: 'walk-in',
-      groupName: '',
-      notes: '',
-    });
-    
-    setView('list');
-    alert('✅ สร้างการจองสำเร็จ / Booking created successfully!');
+      await api.addBooking(booking);
+      await loadData();
+      
+      setNewBooking({
+        guestName: '',
+        idNumber: '',
+        phone: '',
+        checkInDate: getTodayDateString(),
+        checkOutDate: '',
+        roomType: 'single',
+        selectedRoomIds: [],
+        pricingTier: 'general',
+        source: 'walk-in',
+        groupName: '',
+        notes: '',
+      });
+      
+      setView('list');
+      alert('✅ สร้างการจองสำเร็จ / Booking created successfully!');
+    } catch (err) {
+      console.error('Failed to create booking:', err);
+      alert('❌ ไม่สามารถสร้างการจองได้ / Failed to create booking');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCheckIn = (booking: Booking) => {
@@ -141,16 +171,16 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     setShowDetails(true);
   };
 
-  const handleCheckInComplete = () => {
+  const handleCheckInComplete = async () => {
     setShowCheckIn(false);
     setSelectedBooking(null);
-    setBookings(getBookings());
+    await loadData();
   };
 
-  const handleCheckOutComplete = () => {
+  const handleCheckOutComplete = async () => {
     setShowCheckOut(false);
     setSelectedBooking(null);
-    setBookings(getBookings());
+    await loadData();
   };
 
   const toggleRoomSelection = (roomId: string) => {
@@ -621,7 +651,7 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
          <BookingDetailsModal 
             booking={selectedBooking}
             onClose={() => setShowDetails(false)}
-            onUpdate={() => setBookings(getBookings())}
+            onUpdate={() => loadData()}
             currentUser={currentUser}
          />
       )}

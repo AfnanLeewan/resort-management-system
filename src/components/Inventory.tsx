@@ -1,13 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { InventoryItem, InventoryTransaction, User } from '../types';
-import { 
-  getInventoryItems, 
-  saveInventoryItems, 
-  addInventoryItem, 
-  getInventoryTransactions, 
-  addInventoryTransaction,
-  deleteInventoryItem
-} from '../utils/storage';
+import * as api from '../utils/api';
 import { formatCurrency, formatDateTime, getTodayDateString } from '../utils/dateHelpers';
 import { 
   Plus, 
@@ -23,7 +16,8 @@ import {
   User as UserIcon,
   Calendar,
   DollarSign,
-  Box
+  Box,
+  Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -34,8 +28,10 @@ interface InventoryProps {
 
 export function Inventory({ currentUser }: InventoryProps) {
   const [activeTab, setActiveTab] = useState<'items' | 'history'>('items');
-  const [items, setItems] = useState<InventoryItem[]>(getInventoryItems());
-  const [transactions, setTransactions] = useState<InventoryTransaction[]>(getInventoryTransactions());
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals
@@ -63,6 +59,26 @@ export function Inventory({ currentUser }: InventoryProps) {
     notes: ''
   });
 
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [loadedItems, loadedTransactions] = await Promise.all([
+        api.getInventoryItems(),
+        api.getInventoryTransactions(),
+      ]);
+      setItems(loadedItems);
+      setTransactions(loadedTransactions);
+    } catch (err) {
+      console.error('Failed to load inventory data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredItems = useMemo(() => {
     return items.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [items, searchTerm]);
@@ -71,26 +87,42 @@ export function Inventory({ currentUser }: InventoryProps) {
     return transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [transactions]);
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!newItem.name) return;
-    const item: InventoryItem = {
-      id: `ITEM-${Date.now()}`,
-      ...newItem
-    };
-    addInventoryItem(item);
-    setItems(getInventoryItems());
-    setShowAddItemModal(false);
-    setNewItem({ name: '', category: 'general', quantity: 0, unit: 'ชิ้น', minLevel: 5 });
-  };
-
-  const handleDeleteItem = (id: string) => {
-    if (confirm('คุณแน่ใจหรือไม่ที่จะลบรายการนี้? ประวัติการทำรายการจะยังคงอยู่')) {
-      deleteInventoryItem(id);
-      setItems(getInventoryItems());
+    setSaving(true);
+    try {
+      const item: InventoryItem = {
+        id: `ITEM-${Date.now()}`,
+        ...newItem
+      };
+      await api.addInventoryItem(item);
+      await loadData();
+      setShowAddItemModal(false);
+      setNewItem({ name: '', category: 'general', quantity: 0, unit: 'ชิ้น', minLevel: 5 });
+    } catch (err) {
+      console.error('Failed to add item:', err);
+      alert('❌ ไม่สามารถเพิ่มสินค้าได้');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleAddTransaction = () => {
+  const handleDeleteItem = async (id: string) => {
+    if (confirm('คุณแน่ใจหรือไม่ที่จะลบรายการนี้? ประวัติการทำรายการจะยังคงอยู่')) {
+      setSaving(true);
+      try {
+        await api.deleteInventoryItem(id);
+        await loadData();
+      } catch (err) {
+        console.error('Failed to delete item:', err);
+        alert('❌ ไม่สามารถลบรายการได้');
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
+
+  const handleAddTransaction = async () => {
     if (!newTransaction.itemId || newTransaction.quantity <= 0) {
         alert('กรุณาเลือกรายการและระบุจำนวนที่ถูกต้อง');
         return;
@@ -105,41 +137,48 @@ export function Inventory({ currentUser }: InventoryProps) {
         return;
     }
 
-    const transaction: InventoryTransaction = {
-      id: `TRX-${Date.now()}`,
-      itemId: newTransaction.itemId,
-      itemName: selectedItem.name,
-      date: newTransaction.date,
-      type: newTransaction.type,
-      quantity: newTransaction.quantity,
-      pricePerUnit: newTransaction.pricePerUnit,
-      totalPrice: newTransaction.quantity * newTransaction.pricePerUnit,
-      balanceAfter: newTransaction.type === 'in' 
-        ? selectedItem.quantity + newTransaction.quantity 
-        : selectedItem.quantity - newTransaction.quantity,
-      payer: newTransaction.payer,
-      receiver: newTransaction.receiver,
-      notes: newTransaction.notes,
-      createdAt: new Date().toISOString(),
-      createdBy: currentUser.id
-    };
+    setSaving(true);
+    try {
+      const transaction: InventoryTransaction = {
+        id: `TRX-${Date.now()}`,
+        itemId: newTransaction.itemId,
+        itemName: selectedItem.name,
+        date: newTransaction.date,
+        type: newTransaction.type,
+        quantity: newTransaction.quantity,
+        pricePerUnit: newTransaction.pricePerUnit,
+        totalPrice: newTransaction.quantity * newTransaction.pricePerUnit,
+        balanceAfter: newTransaction.type === 'in' 
+          ? selectedItem.quantity + newTransaction.quantity 
+          : selectedItem.quantity - newTransaction.quantity,
+        payer: newTransaction.payer,
+        receiver: newTransaction.receiver,
+        notes: newTransaction.notes,
+        createdAt: new Date().toISOString(),
+        createdBy: currentUser.id
+      };
 
-    addInventoryTransaction(transaction);
-    setTransactions(getInventoryTransactions());
-    setItems(getInventoryItems()); // Update items list for new quantities
-    setShowTransactionModal(false);
-    
-    // Reset form but keep some defaults
-    setNewTransaction({
-        ...newTransaction,
-        itemId: '',
-        quantity: 1,
-        pricePerUnit: 0,
-        sourceOrDest: '',
-        receiver: '',
-        notes: ''
-    });
-    alert('บันทึกรายการเรียบร้อย');
+      await api.addInventoryTransaction(transaction);
+      await loadData();
+      setShowTransactionModal(false);
+      
+      // Reset form but keep some defaults
+      setNewTransaction({
+          ...newTransaction,
+          itemId: '',
+          quantity: 1,
+          pricePerUnit: 0,
+          sourceOrDest: '',
+          receiver: '',
+          notes: ''
+      });
+      alert('บันทึกรายการเรียบร้อย');
+    } catch (err) {
+      console.error('Failed to add transaction:', err);
+      alert('❌ ไม่สามารถบันทึกรายการได้');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

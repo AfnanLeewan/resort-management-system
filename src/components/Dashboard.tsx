@@ -1,18 +1,30 @@
 import { useMemo, useState } from 'react';
 import { DashboardStats } from '../types';
-import { getRooms, getBookings, getPayments, getMaintenanceReports } from '../utils/storage';
+import { useDashboardData } from '../hooks/useSupabase';
 import { isToday, isThisMonth, formatCurrency } from '../utils/dateHelpers';
-import { TrendingUp, Bed, AlertCircle, DollarSign, Users, Calendar, HelpCircle, BookOpen } from 'lucide-react';
+import { TrendingUp, Bed, AlertCircle, DollarSign, Users, Calendar, HelpCircle, BookOpen, Loader2 } from 'lucide-react';
 import { QuickGuide } from './QuickGuide';
 
 export function Dashboard() {
   const [showGuide, setShowGuide] = useState(false);
+  const { rooms, bookings, payments, maintenanceReports: maintenance, loading, error } = useDashboardData();
   
   const stats = useMemo<DashboardStats>(() => {
-    const rooms = getRooms();
-    const bookings = getBookings();
-    const payments = getPayments();
-    const maintenance = getMaintenanceReports();
+    if (loading) {
+      return {
+        occupancyRate: 0,
+        totalRooms: 0,
+        occupiedRooms: 0,
+        availableRooms: 0,
+        cleaningRooms: 0,
+        maintenanceRooms: 0,
+        todayRevenue: 0,
+        monthRevenue: 0,
+        checkInsToday: 0,
+        checkOutsToday: 0,
+        pendingMaintenance: 0,
+      };
+    }
 
     const totalRooms = rooms.length;
     const occupiedRooms = rooms.filter(r => r.status === 'occupied').length;
@@ -50,7 +62,7 @@ export function Dashboard() {
       checkOutsToday,
       pendingMaintenance,
     };
-  }, []);
+  }, [rooms, bookings, payments, maintenance, loading]);
 
   const StatCard = ({ 
     icon: Icon, 

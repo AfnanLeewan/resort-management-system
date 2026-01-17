@@ -1,27 +1,19 @@
 import { useState, useMemo, useEffect } from 'react';
 import { User, MaintenanceReport, Room } from '../types';
-import { 
-  getRooms, 
-  updateRoomStatus, 
-  getMaintenanceReports, 
-  addMaintenanceReport,
-  updateMaintenanceReport 
-} from '../utils/storage';
+import * as api from '../utils/api';
 import { formatDateTime } from '../utils/dateHelpers';
-import { Sparkles, Wrench, AlertTriangle, CheckCircle, MessageSquare, Check, X } from 'lucide-react';
+import { Sparkles, Wrench, AlertTriangle, CheckCircle, MessageSquare, Check, X, Loader2 } from 'lucide-react';
 
 interface HousekeepingProps {
   currentUser: User;
 }
 
 export function Housekeeping({ currentUser }: HousekeepingProps) {
-  // Initialize rooms and sort them by number to ensure they match Room Grid layout
-  const [rooms, setRooms] = useState<Room[]>(() => {
-    const loadedRooms = getRooms();
-    return loadedRooms.sort((a, b) => a.number - b.number);
-  });
-  
-  const [reports, setReports] = useState<MaintenanceReport[]>(getMaintenanceReports());
+  // State
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [reports, setReports] = useState<MaintenanceReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [view, setView] = useState<'rooms' | 'maintenance'>('rooms');
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
@@ -30,26 +22,49 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
     priority: 'medium' as 'low' | 'medium' | 'high',
   });
 
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [loadedRooms, loadedReports] = await Promise.all([
+        api.getRooms(),
+        api.getMaintenanceReports(),
+      ]);
+      setRooms(loadedRooms.sort((a, b) => a.number - b.number));
+      setReports(loadedReports);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Derived state for filtered rooms
   const cleaningRooms = useMemo(() => rooms.filter(r => r.status === 'cleaning'), [rooms]);
   const maintenanceRooms = useMemo(() => rooms.filter(r => r.status === 'maintenance'), [rooms]);
   const pendingReports = useMemo(() => reports.filter(r => r.status !== 'resolved'), [reports]);
 
   // Handle marking a room as clean
-  const handleMarkClean = (room: Room) => {
+  const handleMarkClean = async (room: Room) => {
     if (confirm(`ยืนยันว่าห้อง ${room.number} สะอาดแล้ว?`)) {
-      // 1. Update storage
-      updateRoomStatus(room.id, 'available');
-      
-      // 2. Update local state immediately for smooth UI
-      setRooms(prevRooms => 
-        prevRooms.map(r => 
-          r.id === room.id ? { ...r, status: 'available' } : r
-        )
-      );
-
-      // Optional: Show toast or small notification instead of alert
-      // alert('✅ อัพเดทสถานะห้องเรียบร้อย');
+      setSaving(true);
+      try {
+        await api.updateRoomStatus(room.id, 'available');
+        // Update local state immediately for smooth UI
+        setRooms(prevRooms => 
+          prevRooms.map(r => 
+            r.id === room.id ? { ...r, status: 'available' } : r
+          )
+        );
+      } catch (err) {
+        console.error('Failed to update room:', err);
+        alert('❌ ไม่สามารถอัพเดทสถานะห้องได้');
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
@@ -60,75 +75,90 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
   };
 
   // Submit maintenance report
-  const handleSubmitReport = () => {
+  const handleSubmitReport = async () => {
     if (!selectedRoom || !newReport.description) {
       alert('กรุณากรอกรายละเอียดปัญหา');
       return;
     }
 
-    const report: MaintenanceReport = {
-      id: `MR${Date.now()}`,
-      roomId: selectedRoom.id,
-      reportedBy: currentUser.id,
-      description: newReport.description,
-      priority: newReport.priority,
-      status: 'pending',
-      reportedAt: new Date().toISOString(),
-    };
+    setSaving(true);
+    try {
+      const report: MaintenanceReport = {
+        id: `MR${Date.now()}`,
+        roomId: selectedRoom.id,
+        reportedBy: currentUser.id,
+        description: newReport.description,
+        priority: newReport.priority,
+        status: 'pending',
+        reportedAt: new Date().toISOString(),
+      };
 
-    // 1. Update storage
-    addMaintenanceReport(report);
-    updateRoomStatus(selectedRoom.id, 'maintenance');
+      await api.addMaintenanceReport(report);
+      await api.updateRoomStatus(selectedRoom.id, 'maintenance');
 
-    // 2. Update local state
-    setReports(prev => [...prev, report]);
-    setRooms(prevRooms => 
-        prevRooms.map(r => 
-          r.id === selectedRoom.id ? { ...r, status: 'maintenance' } : r
-        )
-    );
+      // Update local state
+      setReports(prev => [...prev, report]);
+      setRooms(prevRooms => 
+          prevRooms.map(r => 
+            r.id === selectedRoom.id ? { ...r, status: 'maintenance' } : r
+          )
+      );
 
-    alert(`📱 LINE Notification Sent!\n\n⚠️ แจ้งซ่อม ห้อง ${selectedRoom.number}\n${newReport.description}\n\nระบบจะส่งการแจ้งเตือนไปยัง LINE ของผู้จัดการ`);
+      alert(`📱 LINE Notification Sent!\n\n⚠️ แจ้งซ่อม ห้อง ${selectedRoom.number}\n${newReport.description}\n\nระบบจะส่งการแจ้งเตือนไปยัง LINE ของผู้จัดการ`);
 
-    // 3. Reset form
-    setShowReportModal(false);
-    setSelectedRoom(null);
-    setNewReport({ description: '', priority: 'medium' });
+      // Reset form
+      setShowReportModal(false);
+      setSelectedRoom(null);
+      setNewReport({ description: '', priority: 'medium' });
+    } catch (err) {
+      console.error('Failed to submit report:', err);
+      alert('❌ ไม่สามารถส่งเรื่องแจ้งซ่อมได้');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Update status of a maintenance report
-  const handleUpdateReportStatus = (reportId: string, status: MaintenanceReport['status']) => {
-    // 1. Update storage for report
-    updateMaintenanceReport(reportId, { 
-      status,
-      resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined 
-    });
+  const handleUpdateReportStatus = async (reportId: string, status: MaintenanceReport['status']) => {
+    setSaving(true);
+    try {
+      const updates: Partial<MaintenanceReport> = {
+        status,
+        resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined,
+      };
 
-    // 2. If resolved, update room status to cleaning
-    if (status === 'resolved') {
-      const report = reports.find(r => r.id === reportId);
-      if (report) {
-        updateRoomStatus(report.roomId, 'cleaning');
-        
-        // Update local room state
-        setRooms(prevRooms => 
-            prevRooms.map(r => 
-              r.id === report.roomId ? { ...r, status: 'cleaning' } : r
-            )
-        );
+      await api.updateMaintenanceReport(reportId, updates);
+
+      // If resolved, update room status to cleaning
+      if (status === 'resolved') {
+        const report = reports.find(r => r.id === reportId);
+        if (report) {
+          await api.updateRoomStatus(report.roomId, 'cleaning');
+          // Update local room state
+          setRooms(prevRooms => 
+              prevRooms.map(r => 
+                r.id === report.roomId ? { ...r, status: 'cleaning' } : r
+              )
+          );
+        }
       }
-    }
 
-    // 3. Update local reports state
-    setReports(prevReports => 
-      prevReports.map(r => 
-        r.id === reportId ? { 
-          ...r, 
-          status, 
-          resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined 
-        } : r
-      )
-    );
+      // Update local reports state
+      setReports(prevReports => 
+        prevReports.map(r => 
+          r.id === reportId ? { 
+            ...r, 
+            status, 
+            resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined 
+          } : r
+        )
+      );
+    } catch (err) {
+      console.error('Failed to update report:', err);
+      alert('❌ ไม่สามารถอัพเดทสถานะได้');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getPriorityBadge = (priority: MaintenanceReport['priority']) => {

@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
-import { Booking, User, Payment, Charge } from '../types';
-import { updateBooking, updateRoomStatus, addPayment, getRooms, getNextReceiptNumber, getNextInvoiceNumber } from '../utils/storage';
+import { useState, useMemo, useEffect } from 'react';
+import { Booking, User, Payment, Charge, Room } from '../types';
+import * as api from '../utils/api';
 import { calculateNights, calculateHoursDifference, extractVAT, extractBasePrice, calculateEarlyCheckInCharge, calculateLateCheckOutCharge } from '../utils/pricing';
 import { formatCurrency, formatDateTime, getCurrentLocalDateTime } from '../utils/dateHelpers';
-import { X, Printer, CreditCard, Banknote, Smartphone, Check, Clock, FileText, User as UserIcon, Building, Info } from 'lucide-react';
+import { X, Printer, CreditCard, Banknote, Smartphone, Check, Clock, FileText, User as UserIcon, Building, Info, Loader2 } from 'lucide-react';
 import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
 
 interface CheckOutModalProps {
@@ -22,8 +22,25 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
   const [penaltyReason, setPenaltyReason] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [receipt, setReceipt] = useState<Payment | null>(null);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
 
-  const rooms = getRooms();
+  // Load rooms on mount
+  useEffect(() => {
+    const loadRooms = async () => {
+      try {
+        const loadedRooms = await api.getRooms();
+        setRooms(loadedRooms);
+      } catch (err) {
+        console.error('Failed to load rooms:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadRooms();
+  }, []);
+
   const bookingRooms = rooms.filter(r => booking.roomIds.includes(r.id));
   const roomNumbers = bookingRooms.map(r => r.number).join(', ');
 
@@ -141,39 +158,49 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
 
   const canApplyDiscount = currentUser.role === 'board' || currentUser.role === 'management';
 
-  const handlePayment = () => {
-    if (!confirm(`ยืนยันการชำระเงิน ${formatCurrency(total)} ?`)) {
-      return;
+  const handlePayment = async () => {
+    // Removed blocking confirm dialog for better UX
+    setProcessing(true);
+    try {
+      const [receiptNumber, invoiceNumber] = await Promise.all([
+        api.getNextReceiptNumber(),
+        api.getNextInvoiceNumber(),
+      ]);
+
+      const payment: Payment = {
+        id: `PAY${Date.now()}`,
+        bookingId: booking.id,
+        amount: total,
+        method: paymentMethod,
+        receiptNumber,
+        invoiceNumber,
+        paidAt: new Date().toISOString(),
+        paidBy: currentUser.id,
+        charges,
+        subtotal,
+        vat,
+        total,
+      };
+
+      await api.addPayment(payment);
+
+      await api.updateBooking(booking.id, {
+        status: 'checked-out',
+        actualCheckOutTime: checkOutTime,
+      });
+
+      for (const roomId of booking.roomIds) {
+        await api.updateRoomStatus(roomId, 'cleaning');
+      }
+
+      setReceipt(payment);
+      setShowReceipt(true);
+    } catch (err) {
+      console.error('Payment failed:', err);
+      alert('❌ ไม่สามารถบันทึกการชำระเงินได้');
+    } finally {
+      setProcessing(false);
     }
-
-    const payment: Payment = {
-      id: `PAY${Date.now()}`,
-      bookingId: booking.id,
-      amount: total,
-      method: paymentMethod,
-      receiptNumber: getNextReceiptNumber(),
-      invoiceNumber: getNextInvoiceNumber(),
-      paidAt: new Date().toISOString(),
-      paidBy: currentUser.id,
-      charges,
-      subtotal,
-      vat,
-      total,
-    };
-
-    addPayment(payment);
-
-    updateBooking(booking.id, {
-      status: 'checked-out',
-      actualCheckOutTime: checkOutTime,
-    });
-
-    booking.roomIds.forEach(roomId => {
-      updateRoomStatus(roomId, 'cleaning');
-    });
-
-    setReceipt(payment);
-    setShowReceipt(true);
   };
 
   const handlePrintReceipt = () => {
@@ -453,7 +480,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                     <input
                         type="number"
                         min="0"
-                        value={discount}
+                        value={discount === 0 ? '' : discount}
                         onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
                         className="w-full px-4 py-3 border border-yellow-200 rounded-xl focus:border-yellow-500 outline-none bg-white text-yellow-900 font-bold"
                     />
@@ -483,7 +510,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                     <input
                         type="number"
                         min="0"
-                        value={penalty}
+                        value={penalty === 0 ? '' : penalty}
                         onChange={(e) => setPenalty(parseFloat(e.target.value) || 0)}
                         className="w-full px-4 py-3 border border-red-200 rounded-xl focus:border-red-500 outline-none bg-white text-red-900 font-bold"
                     />
@@ -545,10 +572,20 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
           <div className="flex gap-4 pt-6 border-t border-slate-100">
             <button
               onClick={handlePayment}
-              className="flex-1 bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-bold shadow-lg shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg"
+              disabled={processing}
+              className="flex-1 bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-bold shadow-lg shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <CreditCard className="w-6 h-6" />
-              ชำระเงิน {formatCurrency(total)}
+              {processing ? (
+                <>
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  กำลังประมวลผล...
+                </>
+              ) : (
+                <>
+                  <CreditCard className="w-6 h-6" />
+                  ชำระเงิน {formatCurrency(total)}
+                </>
+              )}
             </button>
             <button
               onClick={onClose}

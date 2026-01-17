@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Booking, Charge, User } from '../types';
-import { updateBooking } from '../utils/storage';
-import { X, Save, Plus, Trash2, FileText, User as UserIcon, Phone, CreditCard, ShoppingBag, MapPin, Banknote } from 'lucide-react';
+import * as api from '../utils/api';
+import { X, Save, Plus, Trash2, FileText, User as UserIcon, Phone, CreditCard, ShoppingBag, MapPin, Banknote, Loader2 } from 'lucide-react';
 import { formatCurrency } from '../utils/dateHelpers';
 
 interface BookingDetailsModalProps {
@@ -18,6 +18,7 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
   const [address, setAddress] = useState(booking.guest.address || '');
   const [deposit, setDeposit] = useState(booking.deposit?.toString() || '');
   const [notes, setNotes] = useState(booking.notes || '');
+  const [saving, setSaving] = useState(false);
   
   const [additionalCharges, setAdditionalCharges] = useState<Charge[]>(booking.additionalCharges || []);
   
@@ -73,23 +74,31 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
     setAdditionalCharges(additionalCharges.filter(c => c.id !== id));
   };
 
-  const handleSave = () => {
-    updateBooking(booking.id, {
-      guest: {
-        ...booking.guest,
-        name: guestName,
-        phone: phone,
-        idNumber: idNumber,
-        address: address,
-      },
-      deposit: deposit ? parseFloat(deposit) : 0,
-      notes: notes,
-      additionalCharges: additionalCharges
-    });
-    
-    alert('บันทึกข้อมูลเรียบร้อย / Saved successfully');
-    onUpdate();
-    onClose();
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.updateBooking(booking.id, {
+        guest: {
+          ...booking.guest,
+          name: guestName,
+          phone: phone,
+          idNumber: idNumber,
+          address: address,
+        },
+        deposit: deposit ? parseFloat(deposit) : 0,
+        notes: notes,
+        additionalCharges: additionalCharges
+      });
+      
+      alert('บันทึกข้อมูลเรียบร้อย / Saved successfully');
+      onUpdate();
+      onClose();
+    } catch (err) {
+      console.error('Failed to save booking:', err);
+      alert('❌ ไม่สามารถบันทึกข้อมูลได้');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

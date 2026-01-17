@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Booking, User } from '../types';
-import { updateBooking, updateRoomStatus } from '../utils/storage';
+import * as api from '../utils/api';
 import { getCurrentLocalDateTime } from '../utils/dateHelpers';
-import { X, User as UserIcon, Clock, CreditCard, Info } from 'lucide-react';
+import { X, User as UserIcon, Clock, CreditCard, Info, Loader2 } from 'lucide-react';
 
 interface CheckInModalProps {
   booking: Booking;
@@ -13,21 +13,30 @@ interface CheckInModalProps {
 
 export function CheckInModal({ booking, onClose, onComplete, currentUser }: CheckInModalProps) {
   const [checkInTime, setCheckInTime] = useState(getCurrentLocalDateTime());
+  const [loading, setLoading] = useState(false);
 
-  const handleCheckIn = () => {
-    // Update booking status
-    updateBooking(booking.id, {
-      status: 'checked-in',
-      actualCheckInTime: checkInTime,
-    });
+  const handleCheckIn = async () => {
+    setLoading(true);
+    try {
+      // Update booking status
+      await api.updateBooking(booking.id, {
+        status: 'checked-in',
+        actualCheckInTime: checkInTime,
+      });
 
-    // Update room status to occupied
-    booking.roomIds.forEach(roomId => {
-      updateRoomStatus(roomId, 'occupied', booking.id);
-    });
+      // Update room status to occupied
+      for (const roomId of booking.roomIds) {
+        await api.updateRoomStatus(roomId, 'occupied', booking.id);
+      }
 
-    alert('✅ เช็คอินสำเร็จ / Check-in successful!');
-    onComplete();
+      alert('✅ เช็คอินสำเร็จ / Check-in successful!');
+      onComplete();
+    } catch (err) {
+      console.error('Check-in failed:', err);
+      alert('❌ ไม่สามารถเช็คอินได้');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

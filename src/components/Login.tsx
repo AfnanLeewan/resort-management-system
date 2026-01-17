@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from '../types';
-import { getUsers, setCurrentUser } from '../utils/storage';
+import * as api from '../utils/api';
 import { seedDemoData, hasDemoData } from '../utils/seedData';
-import { LogIn, User as UserIcon, Lock } from 'lucide-react';
+import { LogIn, User as UserIcon, Lock, Loader2 } from 'lucide-react';
 import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
 
 interface LoginProps {
@@ -12,18 +12,44 @@ interface LoginProps {
 export function Login({ onLogin }: LoginProps) {
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
-  const users = getUsers();
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loggingIn, setLoggingIn] = useState(false);
   const hasDemo = hasDemoData();
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Load users on mount
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const loadedUsers = await api.getUsers();
+        setUsers(loadedUsers);
+      } catch (err) {
+        console.error('Failed to load users:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadUsers();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(u => u.username === username.toLowerCase());
+    setLoggingIn(true);
+    setError('');
     
-    if (user) {
-      setCurrentUser(user);
-      onLogin(user);
-    } else {
-      setError('ไม่พบผู้ใช้งาน / User not found');
+    try {
+      const user = await api.getUserByUsername(username.toLowerCase());
+      
+      if (user) {
+        api.setCurrentUser(user);
+        onLogin(user);
+      } else {
+        setError('ไม่พบผู้ใช้งาน / User not found');
+      }
+    } catch (err) {
+      setError('เกิดข้อผิดพลาด / Error occurred');
+    } finally {
+      setLoggingIn(false);
     }
   };
 
@@ -85,10 +111,20 @@ export function Login({ onLogin }: LoginProps) {
 
           <button
             type="submit"
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-xl font-bold shadow-lg shadow-orange-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+            disabled={loggingIn}
+            className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white py-4 rounded-xl font-bold shadow-lg shadow-orange-200 transition-all active:scale-95 flex items-center justify-center gap-2"
           >
-            <LogIn className="w-5 h-5" />
-            เข้าสู่ระบบ
+            {loggingIn ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                กำลังเข้าสู่ระบบ...
+              </>
+            ) : (
+              <>
+                <LogIn className="w-5 h-5" />
+                เข้าสู่ระบบ
+              </>
+            )}
           </button>
         </form>
 

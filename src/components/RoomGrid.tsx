@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Room, User, Booking, Payment } from '../types';
-import { getRooms, getBookings, addBooking, updateRoomStatus, addPayment, getNextReceiptNumber, getNextInvoiceNumber } from '../utils/storage';
+import * as api from '../utils/api';
+import { extractBasePrice, extractVAT } from '../utils/pricing';
 import { 
   Bed, 
   BedDouble, 
@@ -29,7 +30,8 @@ import {
   MapPin,
   Banknote,
   ArrowLeft,
-  Waves
+  Waves,
+  Loader2
 } from 'lucide-react';
 import { formatCurrency, formatDate, getTodayDateString } from '../utils/dateHelpers';
 import { PRICING } from '../utils/pricing';
@@ -49,8 +51,9 @@ interface RoomGridProps {
 }
 
 export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
-  const [rooms, setRooms] = useState<Room[]>(() => getRooms());
-  const [bookings, setBookings] = useState<Booking[]>(() => getBookings());
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   
   // Multi-selection state
@@ -65,13 +68,36 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
   const [selectedBookingForCheckOut, setSelectedBookingForCheckOut] = useState<Booking | null>(null);
 
   // Load data
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRooms(getRooms());
-      setBookings(getBookings());
-    }, 30000);
-    return () => clearInterval(interval);
+  const loadData = useCallback(async () => {
+    try {
+      const [loadedRooms, loadedBookings] = await Promise.all([
+        api.getRooms(),
+        api.getBookings(),
+      ]);
+      setRooms(loadedRooms);
+      setBookings(loadedBookings);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  // Helper to update room status
+  const handleUpdateRoomStatus = async (roomId: string, status: Room['status']) => {
+    try {
+      await api.updateRoomStatus(roomId, status);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to update room status:', err);
+    }
+  };
 
   const selectedDateStr = useMemo(() => format(selectedDate, 'yyyy-MM-dd'), [selectedDate]);
   const isToday = selectedDateStr === getTodayDateString();
@@ -88,6 +114,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
     const booking = bookings.find(b => 
         b.roomIds.includes(room.id) && 
         b.status !== 'cancelled' &&
+        b.status !== 'checked-out' && // Fix: Ignore checked-out bookings
         b.checkInDate <= dateStr && 
         b.checkOutDate > dateStr
     );
@@ -128,6 +155,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
      return bookings.find(b => 
         b.roomIds.includes(roomId) && 
         b.status !== 'cancelled' &&
+        b.status !== 'checked-out' && // Fix: Don't show checked-out bookings as active
         b.checkInDate <= dateStr && 
         b.checkOutDate > dateStr
     );
@@ -220,9 +248,14 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
     </div>
   );
 
+  // Hydrate selectedRooms with fresh data to ensure status is up-to-date
+  const freshSelectedRooms = useMemo(() => {
+     return selectedRooms.map(s => rooms.find(r => r.id === s.id) || s);
+  }, [selectedRooms, rooms]);
+
   // Derived state for the central view
-  const singleSelectedRoom = selectedRooms.length === 1 ? selectedRooms[0] : null;
-  const isGroupSelection = selectedRooms.length > 1;
+  const singleSelectedRoom = freshSelectedRooms.length === 1 ? freshSelectedRooms[0] : null;
+  const isGroupSelection = freshSelectedRooms.length > 1;
 
   // Change Date Handlers
   const handlePrevDate = () => setSelectedDate(prev => addDays(prev, -1));
@@ -433,7 +466,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                                           </button>
                                           {isToday && (
                                             <button 
-                                                onClick={() => { updateRoomStatus(singleSelectedRoom.id, 'maintenance'); setRooms(getRooms()); }}
+                                                onClick={() => handleUpdateRoomStatus(singleSelectedRoom.id, 'maintenance')}
                                                 className="px-6 py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all"
                                             >
                                                 แจ้งซ่อม
@@ -522,13 +555,13 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
 
                                                  {/* Allow checkout only if occupied/checked-in/stayover */}
                                                  {(status === 'occupied' || isCheckedIn) && (
-                                                     <button 
-                                                        onClick={() => { updateRoomStatus(singleSelectedRoom.id, 'cleaning'); setRooms(getRooms()); }}
-                                                        className="flex-1 py-4 bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 rounded-xl font-bold transition-all"
-                                                     >
-                                                        เช็คเอาท์
-                                                     </button>
-                                                 )}
+                                                      <button 
+                                                         onClick={() => handleUpdateRoomStatus(singleSelectedRoom.id, 'cleaning')}
+                                                         className="flex-1 py-4 bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 rounded-xl font-bold transition-all"
+                                                      >
+                                                         เช็คเอาท์
+                                                      </button>
+                                                  )}
                                               </div>
                                           )}
                                           {!isToday && (
@@ -551,13 +584,13 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                                          {status === 'cleaning' ? 'แม่บ้านกำลังทำความสะอาดห้องนี้' : 'ช่างกำลังซ่อมบำรุงห้องนี้'}
                                       </p>
                                       {isToday && (
-                                          <button 
-                                             onClick={() => { updateRoomStatus(singleSelectedRoom.id, 'available'); setRooms(getRooms()); }}
-                                             className="px-8 py-4 bg-green-500 hover:bg-green-600 text-white rounded-2xl font-bold shadow-xl shadow-green-200 transition-all"
-                                          >
-                                             เสร็จสิ้นการดำเนินการ
-                                          </button>
-                                      )}
+                                           <button 
+                                              onClick={() => handleUpdateRoomStatus(singleSelectedRoom.id, 'available')}
+                                              className="px-8 py-4 bg-green-500 hover:bg-green-600 text-white rounded-2xl font-bold shadow-xl shadow-green-200 transition-all"
+                                           >
+                                              เสร็จสิ้นการดำเนินการ
+                                           </button>
+                                       )}
                                    </div>
                                 );
                             })()}
@@ -679,8 +712,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
           onSuccess={() => {
             setShowBookingModal(false);
             setSelectedRooms([]); // Clear selection after booking
-            setBookings(getBookings());
-            setRooms(getRooms());
+            loadData();
             alert('บันทึกการจองสำเร็จ / Booking created successfully');
           }}
         />
@@ -693,7 +725,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
             currentUser={currentUser}
             onSuccess={() => {
                 setShowPoolModal(false);
-                setBookings(getBookings()); // Refresh bookings/income
+                loadData(); // Refresh bookings/income
                 alert('บันทึกรายรับเรียบร้อย / Payment recorded');
             }}
           />
@@ -707,8 +739,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
           currentUser={currentUser}
           onComplete={() => {
             setShowCheckInModal(false);
-            setBookings(getBookings());
-            setRooms(getRooms());
+            loadData();
             setSelectedBookingForCheckIn(null);
           }}
         />
@@ -722,8 +753,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
              currentUser={currentUser}
              onComplete={() => {
                 setShowCheckOutModal(false);
-                setBookings(getBookings());
-                setRooms(getRooms());
+                loadData();
                 setSelectedBookingForCheckOut(null);
              }}
           />
@@ -759,55 +789,68 @@ function PoolServiceModal({ onClose, onSuccess, currentUser }: any) {
     const pricePerPerson = 50;
     const total = count * pricePerPerson;
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if(!guestName) return;
 
-        // 1. Create a "Service Booking" to track the transaction context
-        const bookingId = `POOL-${Date.now()}`;
-        const booking: Booking = {
-            id: bookingId,
-            roomIds: [], // No rooms involved
-            guest: { name: guestName, phone: '-', idNumber: '-' },
-            checkInDate: getTodayDateString(),
-            checkOutDate: getTodayDateString(),
-            pricingTier: 'general',
-            baseRate: total,
-            source: 'walk-in',
-            status: 'checked-out', // Service completed immediately upon payment
-            groupName: count > 1 ? `Pool Group (${count})` : undefined,
-            notes: `Pool Service: ${count} person(s)`,
-            createdAt: new Date().toISOString(),
-            createdBy: currentUser?.id || 'system'
-        };
-        addBooking(booking);
+        try {
+            // 1. Create a "Service Booking" to track the transaction context
+            const bookingId = `POOL-${Date.now()}`;
+            const booking: Booking = {
+                id: bookingId,
+                roomIds: [], // No rooms involved
+                guest: { name: guestName, phone: '-', idNumber: '-' },
+                checkInDate: getTodayDateString(),
+                checkOutDate: getTodayDateString(),
+                pricingTier: 'general',
+                baseRate: total,
+                source: 'walk-in',
+                status: 'checked-out', // Service completed immediately upon payment
+                groupName: count > 1 ? `Pool Group (${count})` : undefined,
+                notes: `Pool Service: ${count} person(s)`,
+                createdAt: new Date().toISOString(),
+                createdBy: currentUser?.id || 'system'
+            };
+            
+            // Get the REAL Booking UUID from Supabase (or fallback ID)
+            const realBookingId = await api.addBooking(booking);
 
-        // 2. Create the Payment Record
-        const payment: Payment = {
-            id: `PAY-${Date.now()}`,
-            bookingId: bookingId,
-            amount: total,
-            method: 'cash',
-            receiptNumber: getNextReceiptNumber(),
-            invoiceNumber: getNextInvoiceNumber(),
-            paidAt: new Date().toISOString(),
-            paidBy: currentUser?.name || 'Staff',
-            charges: [
-                {
-                    id: `CHG-${Date.now()}`,
-                    bookingId: bookingId,
-                    type: 'other',
-                    description: `ค่าบริการสระว่ายน้ำ (${count} ท่าน)`,
-                    amount: total
-                }
-            ],
-            subtotal: total,
-            vat: 0,
-            total: total
-        };
-        addPayment(payment);
+            // 2. Create the Payment Record
+            const [receiptNumber, invoiceNumber] = await Promise.all([
+                api.getNextReceiptNumber(),
+                api.getNextInvoiceNumber(),
+            ]);
+            
+            const payment: Payment = {
+                id: `PAY-${Date.now()}`,
+                bookingId: realBookingId, // Use real UUID
+                amount: total,
+                method: 'cash',
+                receiptNumber,
+                invoiceNumber,
+                paidAt: new Date().toISOString(),
+                paidBy: currentUser?.name || 'Staff',
+                charges: [
+                    {
+                        id: `CHG-${Date.now()}`,
+                        bookingId: realBookingId, // Use real UUID
+                        type: 'service',
+                        description: `ค่าบริการสระว่ายน้ำ (Swimming Pool) x${count}`,
+                        amount: total,
+                    }
+                ],
+                subtotal: extractBasePrice(total),
+                vat: extractVAT(total),
+                total: total
+            };
 
-        onSuccess();
+            await api.addPayment(payment);
+            onSuccess();
+            onClose();
+        } catch (err) {
+            console.error('Failed to process pool service:', err);
+            alert('❌ ไม่สามารถบันทึกรายการได้');
+        }
     };
 
     return (
@@ -903,7 +946,7 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
   const isGroup = rooms.length > 1;
   const label = isGroup ? `${rooms.length} ห้อง: ${rooms.map((r: any) => r.label).join(', ')}` : rooms[0].label;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.guestName || !formData.phone || !formData.checkOutDate) return;
 
@@ -914,7 +957,7 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
           name: formData.guestName, 
           idNumber: formData.idNumber || '-', 
           phone: formData.phone,
-          address: formData.address || undefined,
+          address: formData.address || undefined
       },
       checkInDate: formData.checkInDate,
       checkOutDate: formData.checkOutDate,
@@ -928,8 +971,13 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
       createdAt: new Date().toISOString(),
       createdBy: currentUser.id,
     };
-    addBooking(booking);
-    onSuccess();
+    try {
+      await api.addBooking(booking);
+      onSuccess();
+    } catch (err) {
+      console.error('Failed to create booking:', err);
+      alert('❌ ไม่สามารถสร้างการจองได้');
+    }
   };
 
   const handleDateSelect = (field: 'checkInDate' | 'checkOutDate', date: Date | undefined) => {
