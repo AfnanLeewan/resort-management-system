@@ -834,7 +834,7 @@ function PoolServiceModal({ onClose, onSuccess, currentUser }: any) {
                     {
                         id: `CHG-${Date.now()}`,
                         bookingId: realBookingId, // Use real UUID
-                        type: 'service',
+                        type: 'other',
                         description: `ค่าบริการสระว่ายน้ำ (Swimming Pool) x${count}`,
                         amount: total,
                     }

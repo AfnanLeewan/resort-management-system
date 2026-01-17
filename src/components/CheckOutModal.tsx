@@ -3,7 +3,7 @@ import { Booking, User, Payment, Charge, Room } from '../types';
 import * as api from '../utils/api';
 import { calculateNights, calculateHoursDifference, extractVAT, extractBasePrice, calculateEarlyCheckInCharge, calculateLateCheckOutCharge } from '../utils/pricing';
 import { formatCurrency, formatDateTime, getCurrentLocalDateTime } from '../utils/dateHelpers';
-import { X, Printer, CreditCard, Banknote, Smartphone, Check, Clock, FileText, User as UserIcon, Building, Info, Loader2 } from 'lucide-react';
+import { X, Printer, CreditCard, Banknote, Smartphone, Check, Clock, FileText, User as UserIcon, Building, Info, Loader2, ShoppingBag, Trash2, Plus } from 'lucide-react';
 import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
 
 interface CheckOutModalProps {
@@ -12,6 +12,15 @@ interface CheckOutModalProps {
   onComplete: () => void;
   currentUser: User;
 }
+
+const getChargeLabel = (type: string) => {
+  switch(type) {
+    case 'service': return 'บริการ';
+    case 'food': return 'อาหาร/เครื่องดื่ม';
+    case 'room': return 'เตียงเสริม';
+    default: return 'อื่นๆ';
+  }
+};
 
 export function CheckOutModal({ booking, onClose, onComplete, currentUser }: CheckOutModalProps) {
   const [checkOutTime, setCheckOutTime] = useState(getCurrentLocalDateTime());
@@ -25,6 +34,20 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  
+  // Extra Charges State
+  const [extraCharges, setExtraCharges] = useState<{type: string, description: string, amount: number}[]>([]);
+  const [newExtraCharge, setNewExtraCharge] = useState({ type: 'other', description: '', amount: 0 });
+
+  const handleAddExtraCharge = () => {
+    if (!newExtraCharge.description || newExtraCharge.amount <= 0) return;
+    setExtraCharges([...extraCharges, { ...newExtraCharge }]);
+    setNewExtraCharge({ type: 'other', description: '', amount: 0 });
+  };
+
+  const handleRemoveExtraCharge = (index: number) => {
+    setExtraCharges(extraCharges.filter((_, i) => i !== index));
+  };
 
   // Load rooms on mount
   useEffect(() => {
@@ -132,6 +155,24 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
       });
     }
 
+    // Manual Extra Charges
+    extraCharges.forEach((charge, index) => {
+      // Map UI types to valid DB ChargeType enum
+      // Allowed: 'room', 'early-checkin', 'late-checkout', 'discount', 'other'
+      let dbType = 'other';
+      if (charge.type === 'room') dbType = 'room';
+      
+      chargeList.push({
+        id: `charge-extra-${index}-${Date.now()}`,
+        bookingId: booking.id,
+        type: dbType as any,
+        description: charge.type !== 'other' && charge.type !== 'room' 
+          ? `[${getChargeLabel(charge.type)}] ${charge.description}`
+          : charge.description,
+        amount: charge.amount,
+      });
+    });
+
     // Discount
     if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management')) {
       chargeList.push({
@@ -145,7 +186,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
     }
 
     return chargeList;
-  }, [booking, rooms, checkOutTime, discount, discountReason, penalty, penaltyReason, currentUser]);
+  }, [booking, rooms, checkOutTime, discount, discountReason, penalty, penaltyReason, currentUser, extraCharges]);
 
   // Total is the sum of charges (Inclusive of VAT)
   const total = useMemo(() => {
@@ -466,6 +507,86 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                 </tfoot>
                 </table>
              </div>
+          </div>
+
+          {/* Optional Services & Extra Expenses */}
+          <div className="bg-purple-50/50 border border-purple-200 rounded-2xl p-6 mb-8">
+               <h3 className="text-purple-800 font-bold mb-4 flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5" />
+                  บริการเสริม & ค่าใช้จ่ายอื่นๆ
+               </h3>
+               
+               {/* Input Row */}
+               <div className="flex flex-col gap-4 mb-4">
+                  <div className="grid grid-cols-[1fr_2fr] gap-4">
+                    <select
+                      value={newExtraCharge.type}
+                      onChange={(e) => setNewExtraCharge({...newExtraCharge, type: e.target.value})}
+                      className="px-4 py-3 border border-purple-200 rounded-xl focus:border-purple-500 outline-none bg-white text-purple-900 font-bold"
+                    >
+                      <option value="other">อื่นๆ</option>
+                      <option value="service" label="บริการ">บริการ</option>
+                      <option value="food" label="อาหาร/เครื่องดื่ม">อาหาร/เครื่องดื่ม</option>
+                      <option value="room" label="เตียงเสริม">เตียงเสริม</option>
+                    </select>
+                    <input
+                        type="text"
+                        value={newExtraCharge.description}
+                        onChange={(e) => setNewExtraCharge({...newExtraCharge, description: e.target.value})}
+                        className="px-4 py-3 border border-purple-200 rounded-xl focus:border-purple-500 outline-none bg-white text-purple-900"
+                        placeholder="รายละเอียดรายการ (เช่น เตียงเสริม)"
+                    />
+                  </div>
+                  <div className="grid grid-cols-[2fr_1fr] gap-4 items-end">
+                      <div className="flex items-center gap-2">
+                         <span className="text-purple-800 text-sm font-bold whitespace-nowrap">ราคา (บาท):</span>
+                         <input
+                            type="number"
+                            min="0"
+                            value={newExtraCharge.amount === 0 ? '' : newExtraCharge.amount}
+                            onChange={(e) => setNewExtraCharge({...newExtraCharge, amount: parseFloat(e.target.value) || 0})}
+                            className="w-full px-4 py-3 border border-purple-200 rounded-xl focus:border-purple-500 outline-none bg-white text-purple-900 font-bold text-center"
+                            placeholder="0.00"
+                         />
+                      </div>
+                      <button
+                        onClick={handleAddExtraCharge}
+                        disabled={!newExtraCharge.description || newExtraCharge.amount <= 0}
+                        className="h-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Plus className="w-5 h-5" />
+                        เพิ่มรายการ
+                      </button>
+                  </div>
+               </div>
+
+               {/* Added Items List */}
+               {extraCharges.length > 0 ? (
+                 <div className="bg-white rounded-xl border border-purple-100 overflow-hidden">
+                    <table className="w-full">
+                      <tbody className="divide-y divide-purple-50">
+                        {extraCharges.map((charge, index) => (
+                          <tr key={index} className="group hover:bg-purple-50/50">
+                            <td className="py-3 px-4 text-slate-700 text-sm">{charge.description}</td>
+                            <td className="py-3 px-4 text-right text-slate-700 font-bold">{formatCurrency(charge.amount)}</td>
+                            <td className="py-3 px-4 w-10">
+                              <button 
+                                onClick={() => handleRemoveExtraCharge(index)}
+                                className="text-slate-400 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                 </div>
+               ) : (
+                 <div className="text-center py-6 border-2 border-dashed border-purple-100 rounded-xl text-slate-300 text-sm">
+                    ไม่มีรายการเพิ่มเติม
+                 </div>
+               )}
           </div>
 
           {/* Discount Section */}
