@@ -37,6 +37,7 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
     { id: 'rooms', label: 'สถานะห้องพัก', icon: Bed, roles: ['front-desk', 'housekeeping', 'management'] },
     { id: 'staff', label: 'พนักงาน', icon: Users, roles: ['management', 'board', 'front-desk'] },
     { id: 'housekeeping', label: 'แม่บ้าน', icon: Wrench, roles: ['housekeeping', 'management'] },
+    { id: 'maintenance', label: 'รายการแจ้งซ่อม', icon: Wrench, roles: ['management', 'front-desk', 'housekeeping'] },
     { id: 'inventory', label: 'คลังพัสดุ', icon: Package, roles: ['management', 'housekeeping', 'front-desk'] },
     { id: 'reports', label: 'รายงาน', icon: BarChart3, roles: ['management', 'board'] },
   ];

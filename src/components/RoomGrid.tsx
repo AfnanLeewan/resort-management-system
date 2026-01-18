@@ -39,6 +39,7 @@ import { Calendar } from './ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { CheckInModal } from './CheckInModal';
 import { CheckOutModal } from './CheckOutModal';
+import { MaintenanceReportModal } from './MaintenanceReportModal';
 import { format, addDays, isSameDay, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { cn } from './ui/utils';
@@ -64,8 +65,10 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
   const [showPoolModal, setShowPoolModal] = useState(false);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [showCheckOutModal, setShowCheckOutModal] = useState(false);
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [selectedBookingForCheckIn, setSelectedBookingForCheckIn] = useState<Booking | null>(null);
   const [selectedBookingForCheckOut, setSelectedBookingForCheckOut] = useState<Booking | null>(null);
+  const [selectedRoomForMaintenance, setSelectedRoomForMaintenance] = useState<Room | null>(null);
 
   // Load data
   const loadData = useCallback(async () => {
@@ -466,9 +469,13 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                                           </button>
                                           {isToday && (
                                             <button 
-                                                onClick={() => handleUpdateRoomStatus(singleSelectedRoom.id, 'maintenance')}
-                                                className="px-6 py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all"
+                                                onClick={() => {
+                                                  setSelectedRoomForMaintenance(singleSelectedRoom);
+                                                  setShowMaintenanceModal(true);
+                                                }}
+                                                className="px-6 py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all flex items-center gap-2"
                                             >
+                                                <Wrench className="w-5 h-5" />
                                                 แจ้งซ่อม
                                             </button>
                                           )}
@@ -757,6 +764,24 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                 setSelectedBookingForCheckOut(null);
              }}
           />
+      )}
+
+      {/* Maintenance Report Modal */}
+      {showMaintenanceModal && selectedRoomForMaintenance && currentUser && (
+        <MaintenanceReportModal
+          room={selectedRoomForMaintenance}
+          currentUser={currentUser}
+          onClose={() => {
+            setShowMaintenanceModal(false);
+            setSelectedRoomForMaintenance(null);
+          }}
+          onSuccess={() => {
+            setShowMaintenanceModal(false);
+            setSelectedRoomForMaintenance(null);
+            setSelectedRooms([]);
+            loadData();
+          }}
+        />
       )}
     </div>
   );
