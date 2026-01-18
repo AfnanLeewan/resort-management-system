@@ -296,11 +296,11 @@ export function MaintenanceList({ currentUser }: MaintenanceListProps) {
 
       {/* Filters */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-        <div className="flex flex-col lg:flex-row gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           {/* Search */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-[300px]">
             <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus-within:ring-2 focus-within:ring-orange-100 focus-within:border-orange-300 transition-all">
-              <Search className="w-5 h-5 text-slate-400" />
+              <Search className="w-5 h-5 text-slate-400 shrink-0" />
               <input
                 type="text"
                 placeholder="ค้นหาด้วยคำอธิบาย, ห้อง, หรือชื่อผู้แจ้ง..."
@@ -311,48 +311,51 @@ export function MaintenanceList({ currentUser }: MaintenanceListProps) {
             </div>
           </div>
 
-          {/* Status Filter */}
-          <div className="relative">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="appearance-none px-4 py-3 pr-10 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-600 cursor-pointer hover:border-slate-300 focus:ring-2 focus:ring-orange-100 focus:border-orange-300 outline-none transition-all"
-            >
-              <option value="all">สถานะ: ทั้งหมด</option>
-              <option value="pending">รอรับเรื่อง</option>
-              <option value="in-progress">กำลังซ่อม</option>
-              <option value="resolved">เสร็จสิ้น</option>
-            </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
+          {/* Filter Dropdowns Row */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Status Filter */}
+            <div className="relative">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="appearance-none px-4 py-3 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 cursor-pointer hover:border-slate-300 focus:ring-2 focus:ring-orange-100 focus:border-orange-300 outline-none transition-all min-w-[160px]"
+              >
+                <option value="all">สถานะ: ทั้งหมด</option>
+                <option value="pending">รอรับเรื่อง</option>
+                <option value="in-progress">กำลังซ่อม</option>
+                <option value="resolved">เสร็จสิ้น</option>
+              </select>
+              <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
 
-          {/* Priority Filter */}
-          <div className="relative">
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              className="appearance-none px-4 py-3 pr-10 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-600 cursor-pointer hover:border-slate-300 focus:ring-2 focus:ring-orange-100 focus:border-orange-300 outline-none transition-all"
-            >
-              <option value="all">ความเร่งด่วน: ทั้งหมด</option>
-              <option value="high">ด่วนที่สุด</option>
-              <option value="medium">ปานกลาง</option>
-              <option value="low">ปกติ</option>
-            </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
+            {/* Priority Filter */}
+            <div className="relative">
+              <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                className="appearance-none px-4 py-3 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 cursor-pointer hover:border-slate-300 focus:ring-2 focus:ring-orange-100 focus:border-orange-300 outline-none transition-all min-w-[180px]"
+              >
+                <option value="all">ความเร่งด่วน: ทั้งหมด</option>
+                <option value="high">ด่วนที่สุด</option>
+                <option value="medium">ปานกลาง</option>
+                <option value="low">ปกติ</option>
+              </select>
+              <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
 
-          {/* Sort */}
-          <div className="relative">
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as typeof sortOrder)}
-              className="appearance-none px-4 py-3 pr-10 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-600 cursor-pointer hover:border-slate-300 focus:ring-2 focus:ring-orange-100 focus:border-orange-300 outline-none transition-all"
-            >
-              <option value="newest">เรียง: ล่าสุดก่อน</option>
-              <option value="oldest">เรียง: เก่าสุดก่อน</option>
-              <option value="priority">เรียง: ความเร่งด่วน</option>
-            </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            {/* Sort */}
+            <div className="relative">
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as typeof sortOrder)}
+                className="appearance-none px-4 py-3 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 cursor-pointer hover:border-slate-300 focus:ring-2 focus:ring-orange-100 focus:border-orange-300 outline-none transition-all min-w-[170px]"
+              >
+                <option value="newest">เรียง: ล่าสุดก่อน</option>
+                <option value="oldest">เรียง: เก่าสุดก่อน</option>
+                <option value="priority">เรียง: ความเร่งด่วน</option>
+              </select>
+              <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
         </div>
       </div>
@@ -434,7 +437,7 @@ export function MaintenanceList({ currentUser }: MaintenanceListProps) {
                       )}
                     </td>
                     <td className="px-6 py-5">
-                      {(currentUser.role === 'management' || currentUser.role === 'front-desk') && report.status !== 'resolved' && (
+                      {(currentUser.role === 'management' || currentUser.role === 'front-desk' || currentUser.role === 'repair') && report.status !== 'resolved' && (
                         <div className="flex gap-2">
                           {report.status === 'pending' && (
                             <button

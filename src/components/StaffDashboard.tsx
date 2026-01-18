@@ -682,6 +682,7 @@ function StaffModal({ user, onClose, onSuccess }: { user: User | null, onClose: 
                                 <option value="part-time">Part-time</option>
                                 <option value="housekeeping">แม่บ้าน (Housekeeping)</option>
                                 <option value="front-desk">ต้อนรับ (Front Desk)</option>
+                                <option value="repair">ช่างซ่อม (Repair)</option>
                                 <option value="management">ผู้จัดการ (Management)</option>
                             </select>
                         </div>

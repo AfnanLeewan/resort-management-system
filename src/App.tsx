@@ -26,6 +26,8 @@ export default function App() {
         setCurrentView('housekeeping');
       } else if (user.role === 'board') {
         setCurrentView('reports');
+      } else if (user.role === 'repair') {
+        setCurrentView('maintenance');
       } else {
         setCurrentView('dashboard');
       }
@@ -39,6 +41,8 @@ export default function App() {
       setCurrentView('housekeeping');
     } else if (user.role === 'board') {
       setCurrentView('reports');
+    } else if (user.role === 'repair') {
+      setCurrentView('maintenance');
     } else {
       setCurrentView('dashboard');
     }

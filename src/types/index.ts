@@ -5,7 +5,7 @@ export type RoomStatus = 'available' | 'occupied' | 'cleaning' | 'maintenance';
 export type BookingSource = 'walk-in' | 'phone' | 'ota';
 export type PricingTier = 'general' | 'tour' | 'vip';
 export type PaymentMethod = 'cash' | 'transfer' | 'qr';
-export type UserRole = 'front-desk' | 'housekeeping' | 'management' | 'board' | 'part-time';
+export type UserRole = 'front-desk' | 'housekeeping' | 'management' | 'board' | 'part-time' | 'repair';
 
 export interface Room {
   id: string;
