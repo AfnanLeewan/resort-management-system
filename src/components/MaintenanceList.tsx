@@ -16,7 +16,8 @@ import {
   ChevronDown,
   ArrowUpDown,
   Loader2,
-  Settings
+  Settings,
+  ClipboardCheck
 } from 'lucide-react';
 
 interface MaintenanceListProps {
@@ -187,16 +188,19 @@ export function MaintenanceList({ currentUser }: MaintenanceListProps) {
     const styles = {
       'pending': 'bg-orange-50 text-orange-700 border-orange-200',
       'in-progress': 'bg-blue-50 text-blue-700 border-blue-200',
+      'completed': 'bg-purple-50 text-purple-700 border-purple-200',
       'resolved': 'bg-green-50 text-green-700 border-green-200',
     };
     const labels = {
       'pending': 'รอรับเรื่อง',
       'in-progress': 'กำลังซ่อม',
+      'completed': 'รอตรวจสอบ',
       'resolved': 'เสร็จสิ้น',
     };
     const icons = {
       'pending': <Clock className="w-3.5 h-3.5" />,
       'in-progress': <Settings className="w-3.5 h-3.5 animate-spin" />,
+      'completed': <ClipboardCheck className="w-3.5 h-3.5" />,
       'resolved': <CheckCircle className="w-3.5 h-3.5" />,
     };
     return (
@@ -449,10 +453,18 @@ export function MaintenanceList({ currentUser }: MaintenanceListProps) {
                           )}
                           {report.status === 'in-progress' && (
                             <button
+                              onClick={() => handleUpdateStatus(report.id, 'completed')}
+                              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors text-xs font-bold shadow-sm"
+                            >
+                              แจ้งซ่อมเสร็จ
+                            </button>
+                          )}
+                          {report.status === 'completed' && (
+                            <button
                               onClick={() => handleUpdateStatus(report.id, 'resolved')}
                               className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl transition-colors text-xs font-bold shadow-sm"
                             >
-                              เสร็จสิ้น
+                              อนุมัติปิดงาน
                             </button>
                           )}
                         </div>

@@ -207,7 +207,9 @@ async function handleTextMessage(event: LineEvent, config: any, supabase: any) {
     .select('*, rooms(*)')
     .eq('assigned_to', staffMapping.user_id)
     .eq('status', 'pending_repair_details')
-    .single();
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (pendingRepairState) {
     await processRepairReport(event, pendingRepairState, text, config, supabase, staffMapping);
@@ -223,8 +225,10 @@ async function handleTextMessage(event: LineEvent, config: any, supabase: any) {
         .from('line_cleaning_tasks')
         .select('*, rooms(*)')
         .eq('assigned_to', staffMapping.user_id)
-        .in('status', ['accepted', 'in_progress'])
-        .single();
+        .in('status', ['accepted', 'in_progress', 'pending_repair_details'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       
       if (activeTask) {
         await processRepairReport(event, activeTask, details, config, supabase, staffMapping);
@@ -758,26 +762,56 @@ async function handleAcceptRepair(
   config: any,
   supabase: any
 ) {
-  // Update maintenance report
+  // 1. Get current report state
+  console.log(`[handleAcceptRepair] Checking report: ${reportId}`);
+
   const { data: report, error } = await supabase
     .from('maintenance_reports')
-    .update({
-      status: 'in-progress',
-    })
-    .eq('id', reportId)
-    .eq('status', 'pending')
     .select('*, rooms(*)')
+    .eq('id', reportId)
     .single();
 
   if (error || !report) {
+    console.error(`[handleAcceptRepair] Report not found. ID: ${reportId}`, error);
     await replyMessage(
       event.replyToken!,
-      [FlexTemplates.text('❌ งานนี้ถูกรับไปแล้วหรือไม่พบงาน')],
+      [FlexTemplates.text(`❌ ไม่พบรายการแจ้งซ่อมนี้ (ID: ${reportId})`)],
       config.channelAccessToken
     );
     return;
   }
 
+  // 2. Handle based on status
+  // If pending, update to in-progress
+  if (report.status === 'pending') {
+    const { error: updateError } = await supabase
+      .from('maintenance_reports')
+      .update({
+        status: 'in-progress',
+      })
+      .eq('id', reportId);
+
+    if (updateError) {
+      console.error('Error updating repair status:', updateError);
+      await replyMessage(
+        event.replyToken!,
+        [FlexTemplates.text('❌ เกิดข้อผิดพลาดในการรับงาน')],
+        config.channelAccessToken
+      );
+      return;
+    }
+  } else if (report.status !== 'in-progress') {
+    // If it's completed or resolved, tell user
+    await replyMessage(
+      event.replyToken!,
+      [FlexTemplates.text(`⚠️ งานนี้เสร็จสิ้นไปแล้ว (สถานะ: ${report.status})`)],
+      config.channelAccessToken
+    );
+    return;
+  }
+
+  // 3. Send success response (for both 'pending' transition and 'in-progress' state)
+  // This allows users to re-open the menu if they closed it
   await replyMessage(
     event.replyToken!,
     [
@@ -810,7 +844,7 @@ async function handleAcceptRepair(
   );
 }
 
-// Handle repair complete
+
 async function handleRepairComplete(
   event: LineEvent,
   staffMapping: any,
@@ -818,31 +852,32 @@ async function handleRepairComplete(
   config: any,
   supabase: any
 ) {
-  // Update maintenance report
+  // Update maintenance report to 'completed' (Wait for Inspection)
+  console.log(`[handleRepairComplete] Updating report: ${reportId}`);
+  
   const { data: report, error } = await supabase
     .from('maintenance_reports')
     .update({
-      status: 'resolved',
-      resolved_at: new Date().toISOString(),
+      status: 'resolved', // Using 'resolved' as we don't have 'completed' enum. Frontend filters this by room status.
+      resolved_at: new Date().toISOString(), // Technician marked as done
     })
     .eq('id', reportId)
     .select('*, rooms(*)')
     .single();
 
+  if (error) {
+     console.error('[handleRepairComplete] Error updating report:', error);
+  }
+
   if (error || !report) {
+    console.error(`[handleRepairComplete] Report not found or update failed. ID: ${reportId}`);
     await replyMessage(
       event.replyToken!,
-      [FlexTemplates.text('❌ ไม่พบงานซ่อม')],
+      [FlexTemplates.text(`❌ ไม่พบงานซ่อม (ID: ${reportId})`)],
       config.channelAccessToken
     );
     return;
   }
-
-  // Update room status to cleaning (needs cleaning after repair)
-  await supabase
-    .from('rooms')
-    .update({ status: 'cleaning' })
-    .eq('id', report.room_id);
 
   // Notify admins
   const { data: admins } = await supabase.rpc('get_admins_with_line');
@@ -862,7 +897,7 @@ async function handleRepairComplete(
 
   await replyMessage(
     event.replyToken!,
-    [FlexTemplates.text(`✅ บันทึกเรียบร้อย\nห้อง ${report.rooms?.number} ซ่อมเสร็จ รอ Admin อนุมัติ`)],
+    [FlexTemplates.text(`✅ บันทึกเรียบร้อย\nห้อง ${report.rooms?.number} ซ่อมเสร็จ รอ Admin ตรวจสอบและอนุมัติ`)],
     config.channelAccessToken
   );
 }
@@ -966,6 +1001,7 @@ async function handleOpenRoom(
   );
 }
 
+
 // Handle housekeeper reporting repair during cleaning
 async function handleReportRepairFromClean(
   event: LineEvent,
@@ -990,7 +1026,6 @@ async function handleReportRepairFromClean(
     );
     return;
   }
-
   // Update task status to 'pending_repair_details' - waiting for housekeeper to provide details
   await supabase
     .from('line_cleaning_tasks')

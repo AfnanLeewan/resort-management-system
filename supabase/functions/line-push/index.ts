@@ -112,51 +112,27 @@ async function handleCheckoutAlert(
     return { success: false, error: 'Failed to create task' };
   }
 
-  // Get online housekeepers
-  const { data: housekeepers, error: hkError } = await supabase.rpc('get_online_housekeepers_with_line');
+  // Get ALL housekeepers (not just online ones)
+  const { data: housekeepers, error: hkError } = await supabase
+    .from('staff_line_mapping')
+    .select('*, users!inner(*)')
+    .eq('status', 'active')
+    .eq('users.role', 'housekeeping'); // Correct role name
 
-  if (hkError || !housekeepers || housekeepers.length === 0) {
-    console.log('No online housekeepers found, trying all active');
-    
-    // Fallback: get all active housekeepers
-    const { data: allHk } = await supabase
-      .from('staff_line_mapping')
-      .select('*, users!inner(*)')
-      .eq('status', 'active')
-      .eq('users.role', 'housekeeping');
-
-    if (!allHk || allHk.length === 0) {
-      return { success: false, error: 'No housekeepers available' };
-    }
-
-    const lineIds = allHk.map((h: any) => h.line_user_id);
-    const checkoutTime = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-    
-    await multicastMessage(
-      lineIds,
-      [FlexTemplates.cleaningTask(roomNumber, roomType, checkoutTime, task.id)],
-      config.channelAccessToken
-    );
-
-    // Log notification
-    for (const hk of allHk) {
-      await supabase.from('line_notifications').insert({
-        recipient_user_id: hk.user_id,
-        recipient_line_id: hk.line_user_id,
-        notification_type: 'checkout_alert',
-        related_room_id: roomId,
-        message_content: { roomNumber, roomType },
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-      });
-    }
-
-    return { success: true, sentTo: lineIds.length };
+  if (hkError) {
+    console.error('Error fetching housekeepers:', hkError);
   }
 
-  // Send to online housekeepers
+  if (!housekeepers || housekeepers.length === 0) {
+    console.error('No housekeepers found to notify');
+    return { success: false, error: 'No housekeepers available' };
+  }
+
+  // Send to all housekeepers
   const lineIds = housekeepers.map((h: any) => h.line_user_id);
   const checkoutTime = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+
+  console.log(`Sending checkout alert to ${lineIds.length} housekeepers`);
 
   await multicastMessage(
     lineIds,

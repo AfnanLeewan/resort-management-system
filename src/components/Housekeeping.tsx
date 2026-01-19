@@ -3,7 +3,7 @@ import { User, MaintenanceReport, Room, LineCleaningTask } from '../types';
 import * as api from '../utils/api';
 import * as lineService from '../utils/lineService';
 import { formatDateTime } from '../utils/dateHelpers';
-import { Sparkles, Wrench, AlertTriangle, CheckCircle, MessageSquare, Check, X, Loader2, ClipboardCheck, Clock } from 'lucide-react';
+import { Sparkles, Wrench, AlertTriangle, CheckCircle, MessageSquare, Check, X, Loader2, ClipboardCheck, Clock, User as UserIcon } from 'lucide-react';
 interface HousekeepingProps {
   currentUser: User;
 }
@@ -51,7 +51,21 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
   // Derived state for filtered rooms
   const cleaningRooms = useMemo(() => rooms.filter(r => r.status === 'cleaning'), [rooms]);
   const maintenanceRooms = useMemo(() => rooms.filter(r => r.status === 'maintenance'), [rooms]);
-  const pendingReports = useMemo(() => reports.filter(r => r.status !== 'resolved'), [reports]);
+  const activeReports = useMemo(() => reports.filter(r => {
+      // Show if not resolved, OR resolved but room is still in maintenance (waiting for approval)
+      if (r.status !== 'resolved') return true;
+      const room = rooms.find(rm => rm.id === r.roomId);
+      return room?.status === 'maintenance';
+  }), [reports, rooms]);
+  
+  const pendingReports = useMemo(() => reports.filter(r => r.status === 'pending'), [reports]);
+  const inProgressReports = useMemo(() => reports.filter(r => r.status === 'in-progress'), [reports]);
+  
+  // Completed reports (Wait for Inspection) are those marked as resolved by technician but room is still maintenance
+  const completedReports = useMemo(() => reports.filter(r => {
+       const room = rooms.find(rm => rm.id === r.roomId);
+       return (r.status === 'completed' || r.status === 'resolved') && room?.status === 'maintenance';
+  }), [reports, rooms]);
   
   // Cleaning tasks by status
   const pendingTasks = useMemo(() => 
@@ -80,21 +94,44 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
   };
   // Handle marking a room as clean
   const handleMarkClean = async (room: Room) => {
-    if (confirm(`ยืนยันว่าห้อง ${room.number} สะอาดแล้ว?`)) {
-      setSaving(true);
-      try {
-        await api.updateRoomStatus(room.id, 'available');
-        // Update local state immediately for smooth UI
-        setRooms(prevRooms => 
-          prevRooms.map(r => 
-            r.id === room.id ? { ...r, status: 'available' } : r
-          )
-        );
-      } catch (err) {
-        console.error('Failed to update room:', err);
-        alert('❌ ไม่สามารถอัพเดทสถานะห้องได้');
-      } finally {
-        setSaving(false);
+    // Check if there is an active cleaning task
+    const task = cleaningTasks.find(t => t.roomId === room.id && t.status !== 'completed' && t.status !== 'inspected');
+
+    if (task) {
+       // Flow with Inspection
+       if (confirm(`แจ้งทำความสะอาดห้อง ${room.number} เสร็จแล้ว? (ส่งให้ตรวจสอบ)`)) {
+          setSaving(true);
+          try {
+             // Update task to completed (Wait Inspection)
+             await lineService.updateCleaningTaskStatus(task.id, 'completed');
+             // Update local state
+             setCleaningTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed', completedAt: new Date().toISOString() } : t));
+             // Note: Room status stays 'cleaning' until approved
+          } catch (err) {
+             console.error('Failed to update task:', err);
+             alert('❌ ไม่สามารถอัพเดทสถานะงานได้');
+          } finally {
+             setSaving(false);
+          }
+       }
+    } else {
+      // Manual overrides (No task matched)
+      if (confirm(`ยืนยันว่าห้อง ${room.number} สะอาดแล้ว? (ข้ามการตรวจสอบ)`)) {
+        setSaving(true);
+        try {
+          await api.updateRoomStatus(room.id, 'available');
+          // Update local state immediately for smooth UI
+          setRooms(prevRooms => 
+            prevRooms.map(r => 
+              r.id === room.id ? { ...r, status: 'available' } : r
+            )
+          );
+        } catch (err) {
+          console.error('Failed to update room:', err);
+          alert('❌ ไม่สามารถอัพเดทสถานะห้องได้');
+        } finally {
+          setSaving(false);
+        }
       }
     }
   };
@@ -154,8 +191,8 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
     }
     setSaving(true);
     try {
-      const report: MaintenanceReport = {
-        id: `MR${Date.now()}`,
+      const newReportData: MaintenanceReport = {
+        id: `MR${Date.now()}`, // Temporary ID, will be replaced by DB
         roomId: selectedRoom.id,
         reportedBy: currentUser.id,
         description: newReport.description,
@@ -163,72 +200,97 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
         status: 'pending',
         reportedAt: new Date().toISOString(),
       };
-      await api.addMaintenanceReport(report);
-      await api.updateRoomStatus(selectedRoom.id, 'maintenance');
-      // If this report is from a housekeeper task, mark it as inspected
-      if (selectedTask) {
-        await lineService.updateCleaningTaskStatus(selectedTask.id, 'inspected', currentUser.id);
-        setCleaningTasks(prev => prev.filter(t => t.id !== selectedTask.id));
-      }
-      // Update local state
-      setReports(prev => [...prev, report]);
-      setRooms(prevRooms => 
-          prevRooms.map(r => 
-            r.id === selectedRoom.id ? { ...r, status: 'maintenance' } : r
-          )
-      );
-      alert(`📱 LINE Notification Sent!\n\n⚠️ แจ้งซ่อม ห้อง ${selectedRoom.number}\n${newReport.description}\n\nระบบจะส่งการแจ้งเตือนไปยัง LINE ของผู้จัดการ`);
-      // Reset form
-      setShowReportModal(false);
-      setSelectedRoom(null);
-      setSelectedTask(null);
-      setNewReport({ description: '', priority: 'medium' });
-    } catch (err) {
-      console.error('Failed to submit report:', err);
-      alert('❌ ไม่สามารถส่งเรื่องแจ้งซ่อมได้');
-    } finally {
-      setSaving(false);
+      
+      const createdReport = await api.addMaintenanceReport(newReportData);
+    
+    // Send LINE Notification using the REAL ID from DB
+    await lineService.sendRepairRequestNotification(
+      createdReport.id,
+      selectedRoom.id,
+      selectedRoom.number,
+      createdReport.description,
+      createdReport.priority,
+      currentUser.name
+    );
+
+    await api.updateRoomStatus(selectedRoom.id, 'maintenance');
+    // If this report is from a housekeeper task, mark it as inspected
+    if (selectedTask) {
+      await lineService.updateCleaningTaskStatus(selectedTask.id, 'inspected', currentUser.id);
+      setCleaningTasks(prev => prev.filter(t => t.id !== selectedTask.id));
     }
-  };
+    // Update local state with the created report
+    setReports(prev => [...prev, createdReport]);
+    setRooms(prevRooms => 
+        prevRooms.map(r => 
+          r.id === selectedRoom.id ? { ...r, status: 'maintenance' } : r
+        )
+    );
+    // Reset form
+    setShowReportModal(false);
+    setSelectedRoom(null);
+    setSelectedTask(null);
+    setNewReport({ description: '', priority: 'medium' });
+  } catch (err) {
+    console.error('Failed to submit report:', err);
+    alert('❌ ไม่สามารถส่งเรื่องแจ้งซ่อมได้');
+  } finally {
+    setSaving(false);
+  }
+};
   // Update status of a maintenance report
   const handleUpdateReportStatus = async (reportId: string, status: MaintenanceReport['status']) => {
     setSaving(true);
     try {
       const updates: Partial<MaintenanceReport> = {
-        status,
-        resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined,
-      };
-      await api.updateMaintenanceReport(reportId, updates);
-      // If resolved, update room status to cleaning
-      if (status === 'resolved') {
-        const report = reports.find(r => r.id === reportId);
-        if (report) {
-          await api.updateRoomStatus(report.roomId, 'cleaning');
-          // Update local room state
-          setRooms(prevRooms => 
-              prevRooms.map(r => 
-                r.id === report.roomId ? { ...r, status: 'cleaning' } : r
-              )
-          );
-        }
-      }
-      // Update local reports state
-      setReports(prevReports => 
-        prevReports.map(r => 
-          r.id === reportId ? { 
-            ...r, 
-            status, 
-            resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined 
-          } : r
-        )
-      );
-    } catch (err) {
-      console.error('Failed to update report:', err);
-      alert('❌ ไม่สามารถอัพเดทสถานะได้');
-    } finally {
-      setSaving(false);
+      status,
+      resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined,
+    };
+    await api.updateMaintenanceReport(reportId, updates);
+    
+    const report = reports.find(r => r.id === reportId);
+    
+    // If completed (Repair Done), send LINE notification
+    if (status === 'completed' && report) {
+       const room = rooms.find(r => r.id === report.roomId);
+       if (room) {
+           await lineService.sendRepairCompleteNotification(
+               report.id,
+               report.roomId,
+               room.number,
+               report.description,
+               currentUser.name
+           );
+       }
     }
-  };
+
+    // If resolved, update room status to available (Ready)
+    if (status === 'resolved' && report) {
+        await api.updateRoomStatus(report.roomId, 'available');
+        // Update local room state
+        setRooms(prevRooms => 
+            prevRooms.map(r => 
+              r.id === report.roomId ? { ...r, status: 'available' } : r
+            )
+        );
+    }
+    // Update local reports state
+    setReports(prevReports => 
+      prevReports.map(r => 
+        r.id === reportId ? { 
+          ...r, 
+          status, 
+          resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined 
+        } : r
+      )
+    );
+  } catch (err) {
+    console.error('Failed to update report:', err);
+    alert('❌ ไม่สามารถอัพเดทสถานะได้');
+  } finally {
+    setSaving(false);
+  }
+};
   const getPriorityBadge = (priority: MaintenanceReport['priority']) => {
     const styles = {
       'low': 'bg-slate-100 text-slate-600 border-slate-200',
@@ -250,11 +312,13 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
     const styles = {
       'pending': 'bg-orange-50 text-orange-700 border-orange-200',
       'in-progress': 'bg-blue-50 text-blue-700 border-blue-200',
+      'completed': 'bg-purple-50 text-purple-700 border-purple-200',
       'resolved': 'bg-green-50 text-green-700 border-green-200',
     };
     const labels = {
       'pending': 'รอรับเรื่อง',
       'in-progress': 'กำลังซ่อม',
+      'completed': 'รอตรวจสอบ',
       'resolved': 'เสร็จสิ้น',
     };
     return (
@@ -293,9 +357,9 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
           >
             <Wrench className="w-5 h-5" />
             รายการแจ้งซ่อม
-            {pendingReports.length > 0 && (
+            {activeReports.length > 0 && (
               <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold border-2 border-white">
-                {pendingReports.length}
+                {activeReports.length}
               </span>
             )}
           </button>
@@ -643,39 +707,215 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
       {/* Maintenance View */}
       {view === 'maintenance' && (
         <div className="space-y-6">
-          {/* LINE Integration Info */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm flex flex-col md:flex-row gap-8 items-start">
-            <div className="flex-1">
-                <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
-                    <MessageSquare className="w-6 h-6 text-green-500" />
-                    LINE Integration System
-                </h3>
-                <p className="text-slate-500 mb-6">
-                เมื่อมีการแจ้งซ่อมใหม่ ระบบจะทำการส่งข้อความแจ้งเตือนไปยังกลุ่ม LINE ของแผนกช่างและผู้จัดการโดยอัตโนมัติ เพื่อความรวดเร็วในการแก้ไขปัญหา
-                </p>
-                <div className="flex gap-4">
-                    <button className="px-6 py-2 bg-green-500 text-white rounded-xl font-bold shadow-lg shadow-green-200 text-sm hover:bg-green-600 transition-colors">
-                        ทดสอบการส่งข้อความ
-                    </button>
-                    <button className="px-6 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors">
-                        ตั้งค่า Token
-                    </button>
-                </div>
-            </div>
-            
-            <div className="w-full md:w-80 bg-slate-100 rounded-2xl p-4 border border-slate-200">
-               <div className="text-xs font-bold text-slate-400 uppercase mb-2 text-center">Preview</div>
-               <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-sm space-y-1">
-                  <div className="text-green-600 font-bold text-xs mb-2">LINE Notify • Now</div>
-                  <div className="font-bold text-slate-800">⚠️ แจ้งซ่อมด่วน</div>
-                  <div className="text-slate-600">ห้อง: 101</div>
-                  <div className="text-slate-600">ปัญหา: แอร์ไม่เย็น</div>
-                  <div className="text-slate-600">ผู้แจ้ง: {currentUser.name}</div>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+             <div className={`bg-white border rounded-2xl p-4 shadow-sm flex items-center gap-3 ${pendingReports.length > 0 ? 'border-amber-300 ring-2 ring-amber-100' : 'border-slate-200'}`}>
+               <div className={`p-3 rounded-xl ${pendingReports.length > 0 ? 'bg-amber-100 text-amber-600' : 'bg-slate-50 text-slate-400'}`}>
+                  <Clock className="w-6 h-6" />
                </div>
-            </div>
+               <div>
+                  <div className={`text-sm font-bold ${pendingReports.length > 0 ? 'text-amber-700' : 'text-slate-700'}`}>รอช่างรับงาน</div>
+                  <div className="text-lg font-black">{pendingReports.length}</div>
+               </div>
+             </div>
+
+             <div className={`bg-white border rounded-2xl p-4 shadow-sm flex items-center gap-3 ${inProgressReports.length > 0 ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+               <div className={`p-3 rounded-xl ${inProgressReports.length > 0 ? 'bg-blue-100 text-blue-600' : 'bg-slate-50 text-slate-400'}`}>
+                  <Wrench className="w-6 h-6" />
+               </div>
+               <div>
+                  <div className={`text-sm font-bold ${inProgressReports.length > 0 ? 'text-blue-700' : 'text-slate-700'}`}>กำลังซ่อม</div>
+                  <div className="text-lg font-black">{inProgressReports.length}</div>
+               </div>
+             </div>
+
+             <div className={`bg-white border rounded-2xl p-4 shadow-sm flex items-center gap-3 ${completedReports.length > 0 ? 'border-purple-300 ring-2 ring-purple-100' : 'border-slate-200'}`}>
+               <div className={`p-3 rounded-xl ${completedReports.length > 0 ? 'bg-purple-100 text-purple-600' : 'bg-slate-50 text-slate-400'}`}>
+                  <ClipboardCheck className="w-6 h-6" />
+               </div>
+               <div>
+                  <div className={`text-sm font-bold ${completedReports.length > 0 ? 'text-purple-700' : 'text-slate-700'}`}>รอตรวจสอบ</div>
+                  <div className="text-lg font-black">{completedReports.length}</div>
+               </div>
+             </div>
+
+             <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+               <div className="p-3 rounded-xl bg-green-100 text-green-600">
+                  <CheckCircle className="w-6 h-6" />
+               </div>
+               <div>
+                  <div className="text-sm font-bold text-slate-700">เสร็จสิ้นวันนี้</div>
+                  <div className="text-lg font-black">{reports.filter(r => r.status === 'resolved' && new Date(r.reportedAt).toDateString() === new Date().toDateString()).length}</div>
+               </div>
+             </div>
           </div>
-          {/* Maintenance Reports Table */}
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+
+          {/* 1. Pending Reports (Access Task) */}
+          {pendingReports.length > 0 && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-3xl shadow-sm p-8 border-2 border-amber-200">
+              <h3 className="text-amber-800 font-bold mb-6 flex items-center text-xl">
+                 <div className="p-2 bg-amber-100 rounded-lg text-amber-600 mr-3">
+                    <Clock className="w-6 h-6" />
+                 </div>
+                 รอช่างรับงาน
+                 <span className="ml-3 px-3 py-1 bg-amber-600 text-white rounded-full text-sm font-bold">
+                   {pendingReports.length} รายการ
+                 </span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {pendingReports.map(report => {
+                    const room = rooms.find(r => r.id === report.roomId);
+                    return (
+                        <div key={report.id} className="bg-white border-2 border-amber-200 rounded-2xl p-5 shadow-lg shadow-amber-100 flex flex-col">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="text-amber-700 font-black text-2xl">#{room?.number}</div>
+                                {getPriorityBadge(report.priority)}
+                            </div>
+                            
+                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4 flex-1">
+                                <div className="text-xs text-amber-400 font-bold uppercase mb-1">รายละเอียด</div>
+                                <p className="text-amber-900 font-medium text-sm">{report.description}</p>
+                            </div>
+
+                             <div className="flex items-center gap-2 text-slate-400 text-xs mb-4">
+                                <Clock className="w-3 h-3" />
+                                <span>{formatDateTime(report.reportedAt)}</span>
+                            </div>
+
+                            <div className="flex items-center gap-2 mb-4 text-xs font-bold text-slate-500 bg-slate-50 p-2 rounded-lg">
+                                <UserIcon className="w-3 h-3" />
+                                <span>แจ้งโดย: {getUserName(report.reportedBy)}</span>
+                            </div>
+
+                            {/* <button
+                                onClick={() => handleUpdateReportStatus(report.id, 'in-progress')}
+                                disabled={saving}
+                                className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-black rounded-xl font-bold shadow-md shadow-amber-200 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
+                                รับงานซ่อม
+                            </button> */}
+                        </div>
+                    );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 2. In Progress (Repairing -> Done) */}
+          {inProgressReports.length > 0 && (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-3xl shadow-sm p-8 border-2 border-blue-200">
+              <h3 className="text-blue-800 font-bold mb-6 flex items-center text-xl">
+                 <div className="p-2 bg-blue-100 rounded-lg text-blue-600 mr-3 animate-pulse">
+                    <Wrench className="w-6 h-6" />
+                 </div>
+                 กำลังดำเนินการซ่อม
+                 <span className="ml-3 px-3 py-1 bg-blue-600 text-white rounded-full text-sm font-bold">
+                   {inProgressReports.length} รายการ
+                 </span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {inProgressReports.map(report => {
+                    const room = rooms.find(r => r.id === report.roomId);
+                    return (
+                        <div key={report.id} className="bg-white border-2 border-blue-200 rounded-2xl p-5 shadow-lg shadow-blue-100 flex flex-col">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="text-blue-700 font-black text-2xl">#{room?.number}</div>
+                                <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1">
+                                    <Loader2 className="w-3 h-3 animate-spin" /> กำลังซ่อม
+                                </span>
+                            </div>
+                            
+                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 flex-1">
+                                <div className="text-xs text-blue-400 font-bold uppercase mb-1">รายละเอียด</div>
+                                <p className="text-blue-900 font-medium text-sm">{report.description}</p>
+                            </div>
+
+                            {/* <button
+                                onClick={() => handleUpdateReportStatus(report.id, 'completed')}
+                                disabled={saving}
+                                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-200 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                ซ่อมเสร็จแล้ว
+                            </button> */}
+                        </div>
+                    );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 3. Completed (Wait Inspection -> Approve) */}
+          {completedReports.length > 0 && (
+            <div className="bg-gradient-to-r from-purple-50 to-fuchsia-50 rounded-3xl shadow-sm p-8 border-2 border-purple-200 animate-in slide-in-from-top duration-300">
+               <div className="flex items-center justify-between mb-6">
+                 <h3 className="text-purple-800 font-bold flex items-center text-xl">
+                   <div className="p-2 bg-purple-100 rounded-lg text-purple-600 mr-3 relative">
+                      <ClipboardCheck className="w-6 h-6" />
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full animate-pulse" />
+                   </div>
+                   รอตรวจสอบจาก LINE (ช่างซ่อม)
+                   <span className="ml-3 px-3 py-1 bg-purple-600 text-white rounded-full text-sm font-bold">
+                     {completedReports.length} รายการ
+                   </span>
+                </h3>
+                <div className="flex items-center gap-2 text-purple-600 text-sm bg-white px-3 py-1.5 rounded-lg border border-purple-200">
+                  <MessageSquare className="w-4 h-4" />
+                  <span className="font-medium">ช่างแจ้งซ่อมเสร็จแล้ว</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                {completedReports.map(report => {
+                    const room = rooms.find(r => r.id === report.roomId);
+                    return (
+                        <div key={report.id} className="bg-white border-2 border-purple-300 rounded-2xl p-4 text-center shadow-lg shadow-purple-100">
+                            <div className="text-purple-700 font-black text-2xl mb-2">#{room?.number}</div>
+                            
+                            <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 mb-2">
+                                <div className="text-xs text-purple-400 uppercase tracking-wide">รายละเอียด</div>
+                                <div className="text-sm text-purple-800 font-bold truncate">
+                                    {report.description}
+                                </div>
+                            </div>
+
+                            <div className="text-xs text-purple-600 mb-3 flex items-center justify-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {report.reportedAt ? formatDateTime(report.reportedAt) : '-'}
+                            </div>
+
+                            <button
+                                onClick={() => handleUpdateReportStatus(report.id, 'resolved')}
+                                disabled={saving}
+                                className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-3 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-200 active:scale-95 disabled:opacity-50"
+                            >
+                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                อนุมัติ → พร้อม
+                            </button>
+                        </div>
+                    );
+                })}
+              </div>
+            </div>
+          )}
+
+           {/* Empty State */}
+           {activeReports.length === 0 && (
+             <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center shadow-sm">
+               <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Wrench className="w-12 h-12 text-green-500" />
+               </div>
+               <h3 className="text-2xl font-bold text-slate-800 mb-2">เยี่ยมมาก! ไม่มีรายการซ่อมค้าง</h3>
+               <p className="text-slate-500">อุปกรณ์ทุกอย่างทำงานได้ปกติ</p>
+             </div>
+           )}
+
+           {/* Resolved Table (Simple View for History) */}
+             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+             <div className="p-6 border-b border-slate-200 bg-slate-50">
+                <h4 className="font-bold text-slate-700">ประวัติการซ่อมล่าสุด</h4>
+             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50 border-b border-slate-200">
@@ -685,11 +925,10 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ความสำคัญ</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">สถานะ</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">เวลาแจ้ง</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {reports.map(report => {
+                  {reports.filter(r => r.status === 'resolved').slice(0, 5).map(report => {
                     const room = rooms.find(r => r.id === report.roomId);
                     return (
                       <tr key={report.id} className="hover:bg-slate-50 transition-colors">
@@ -702,42 +941,13 @@ export function Housekeeping({ currentUser }: HousekeepingProps) {
                         <td className="px-6 py-4 text-slate-400 text-sm font-medium">
                           {formatDateTime(report.reportedAt)}
                         </td>
-                        <td className="px-6 py-4">
-                          {currentUser.role === 'management' && report.status !== 'resolved' && (
-                            <div className="flex gap-2">
-                              {report.status === 'pending' && (
-                                <button
-                                  onClick={() => handleUpdateReportStatus(report.id, 'in-progress')}
-                                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg transition-colors text-xs font-bold"
-                                >
-                                  รับงาน
-                                </button>
-                              )}
-                              {report.status === 'in-progress' && (
-                                <button
-                                  onClick={() => handleUpdateReportStatus(report.id, 'resolved')}
-                                  className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-xs font-bold"
-                                >
-                                  เสร็จสิ้น
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              
-              {reports.length === 0 && (
-                <div className="text-center py-12 text-slate-400">
-                   <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                   <p className="font-medium">ไม่มีรายการแจ้งซ่อมในระบบ</p>
-                </div>
-              )}
             </div>
-          </div>
+            </div>
         </div>
       )}
       {/* Report Modal */}

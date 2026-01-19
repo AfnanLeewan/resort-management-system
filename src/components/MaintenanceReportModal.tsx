@@ -47,16 +47,16 @@ export function MaintenanceReportModal({
         reportedAt: new Date().toISOString(),
       };
 
-      // Add the maintenance report
-      await api.addMaintenanceReport(report);
+      // Add the maintenance report and get real ID
+      const createdReport = await api.addMaintenanceReport(report);
       
       // Update room status to maintenance
       await api.updateRoomStatus(room.id, 'maintenance');
 
-      // Send LINE notification to technicians
+      // Send LINE notification to technicians using REAL ID
       try {
         const result = await lineService.sendRepairRequestNotification(
-          reportId,
+          createdReport.id,
           room.id,
           room.number,
           description.trim(),
