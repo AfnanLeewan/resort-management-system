@@ -488,16 +488,25 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                                             {isToday ? 'จองห้องนี้' : 'จองล่วงหน้า'}
                                           </button>
                                           {isToday && (
-                                            <button 
-                                                onClick={() => {
-                                                  setSelectedRoomForMaintenance(singleSelectedRoom);
-                                                  setShowMaintenanceModal(true);
-                                                }}
-                                                className="px-6 py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all flex items-center gap-2"
-                                            >
-                                                <Wrench className="w-5 h-5" />
-                                                แจ้งซ่อม
-                                            </button>
+                                            <>
+                                              <button 
+                                                  onClick={() => handleRequestCleaning(singleSelectedRoom)}
+                                                  className="px-6 py-4 bg-white border border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 text-slate-600 rounded-2xl font-bold transition-all flex items-center gap-2"
+                                              >
+                                                  <Sparkles className="w-5 h-5" />
+                                                  แจ้งทำความสะอาด
+                                              </button>
+                                              <button 
+                                                  onClick={() => {
+                                                    setSelectedRoomForMaintenance(singleSelectedRoom);
+                                                    setShowMaintenanceModal(true);
+                                                  }}
+                                                  className="px-6 py-4 bg-white border border-slate-200 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 text-slate-600 rounded-2xl font-bold transition-all flex items-center gap-2"
+                                              >
+                                                  <Wrench className="w-5 h-5" />
+                                                  แจ้งซ่อม
+                                              </button>
+                                            </>
                                           )}
                                         </div>
                                       </div>

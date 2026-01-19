@@ -228,7 +228,7 @@ export const FlexTemplates = {
   // Cleaning task notification for housekeepers
   cleaningTask: (roomNumber: number, roomType: string, checkoutTime: string, taskId: string) => ({
     type: 'flex',
-    altText: `ห้อง ${roomNumber} Checkout แล้ว`,
+    altText: `ห้อง ${roomNumber} ต้องการทำความสะอาด`,
     contents: {
       type: 'bubble',
       header: {
