@@ -105,6 +105,7 @@ function mapMaintenanceFromDB(row: any): MaintenanceReport {
     status: row.status,
     reportedAt: row.reported_at,
     resolvedAt: row.resolved_at || undefined,
+    assignedTo: row.assigned_to || undefined,
     photos: row.photos as string[] || [],
   };
 }

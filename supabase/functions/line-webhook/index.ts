@@ -788,6 +788,7 @@ async function handleAcceptRepair(
       .from('maintenance_reports')
       .update({
         status: 'in-progress',
+        assigned_to: staffMapping.user_id,
       })
       .eq('id', reportId);
 

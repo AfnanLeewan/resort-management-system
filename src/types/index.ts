@@ -75,6 +75,7 @@ export interface MaintenanceReport {
   status: 'pending' | 'in-progress' | 'completed' | 'resolved';
   reportedAt: string;
   resolvedAt?: string;
+  assignedTo?: string;
   photos?: string[];
 }
 
