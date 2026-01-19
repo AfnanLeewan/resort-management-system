@@ -693,7 +693,7 @@ export async function addMaintenanceReport(report: MaintenanceReport): Promise<v
     priority: report.priority,
     status: report.status,
     photos: report.photos || [],
-  });
+  } as any);
 
   if (error) {
     console.error('Error adding maintenance report:', error);

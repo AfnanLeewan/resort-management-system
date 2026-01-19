@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Room, User, Booking, Payment } from '../types';
 import * as api from '../utils/api';
+import * as lineService from '../utils/lineService';
 import { extractBasePrice, extractVAT } from '../utils/pricing';
 import { 
   Bed, 
@@ -99,6 +100,25 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
       await loadData();
     } catch (err) {
       console.error('Failed to update room status:', err);
+    }
+  };
+
+  // Request cleaning manually
+  const handleRequestCleaning = async (room: Room) => {
+    try {
+      // Update room status to cleaning
+      await api.updateRoomStatus(room.id, 'cleaning');
+      
+      // Send LINE notification to housekeepers
+      const roomType = (room as any).displayType === 'double' ? 'เตียงคู่' : 'เตียงเดี่ยว';
+      await lineService.sendCleaningRequest(room.id, room.number, roomType);
+      
+      alert(`✅ ส่งคำขอทำความสะอาด\n\nห้อง ${room.number}\nระบบจะส่งการแจ้งเตือนไปยัง LINE ของแม่บ้าน`);
+      
+      await loadData();
+    } catch (err) {
+      console.error('Failed to request cleaning:', err);
+      alert('❌ ไม่สามารถส่งคำขอทำความสะอาดได้');
     }
   };
 

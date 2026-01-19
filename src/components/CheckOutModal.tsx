@@ -1,18 +1,17 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Booking, User, Payment, Charge, Room } from '../types';
 import * as api from '../utils/api';
+import * as lineService from '../utils/lineService';
 import { calculateNights, calculateHoursDifference, extractVAT, extractBasePrice, calculateEarlyCheckInCharge, calculateLateCheckOutCharge } from '../utils/pricing';
 import { formatCurrency, formatDateTime, getCurrentLocalDateTime } from '../utils/dateHelpers';
 import { X, Printer, CreditCard, Banknote, Smartphone, Check, Clock, FileText, User as UserIcon, Building, Info, Loader2, ShoppingBag, Trash2, Plus } from 'lucide-react';
 import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
-
 interface CheckOutModalProps {
   booking: Booking;
   onClose: () => void;
   onComplete: () => void;
   currentUser: User;
 }
-
 const getChargeLabel = (type: string) => {
   switch(type) {
     case 'service': return 'บริการ';
@@ -21,7 +20,6 @@ const getChargeLabel = (type: string) => {
     default: return 'อื่นๆ';
   }
 };
-
 export function CheckOutModal({ booking, onClose, onComplete, currentUser }: CheckOutModalProps) {
   const [checkOutTime, setCheckOutTime] = useState(getCurrentLocalDateTime());
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'qr'>('cash');
@@ -38,17 +36,14 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
   // Extra Charges State
   const [extraCharges, setExtraCharges] = useState<{type: string, description: string, amount: number}[]>([]);
   const [newExtraCharge, setNewExtraCharge] = useState({ type: 'other', description: '', amount: 0 });
-
   const handleAddExtraCharge = () => {
     if (!newExtraCharge.description || newExtraCharge.amount <= 0) return;
     setExtraCharges([...extraCharges, { ...newExtraCharge }]);
     setNewExtraCharge({ type: 'other', description: '', amount: 0 });
   };
-
   const handleRemoveExtraCharge = (index: number) => {
     setExtraCharges(extraCharges.filter((_, i) => i !== index));
   };
-
   // Load rooms on mount
   useEffect(() => {
     const loadRooms = async () => {
@@ -63,15 +58,12 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
     };
     loadRooms();
   }, []);
-
   const bookingRooms = rooms.filter(r => booking.roomIds.includes(r.id));
   const roomNumbers = bookingRooms.map(r => r.number).join(', ');
-
   // Calculate charges
   const charges = useMemo<Charge[]>(() => {
     const chargeList: Charge[] = [];
     const nights = calculateNights(booking.checkInDate, booking.checkOutDate);
-
     // Room charges
     booking.roomIds.forEach((roomId, index) => {
       const room = rooms.find(r => r.id === roomId);
@@ -83,7 +75,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         amount: booking.baseRate * nights,
       });
     });
-
     // Early check-in penalty
     if (booking.actualCheckInTime) {
       const scheduledCheckIn = new Date(`${booking.checkInDate}T14:00:00`);
@@ -95,7 +86,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
           const description = hoursEarly > 6 
             ? `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง (คิดเต็มวัน)`
             : `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง @ ฿50/ชม.`;
-
           chargeList.push({
             id: `charge-early-checkin`,
             bookingId: booking.id,
@@ -106,7 +96,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         }
       }
     }
-
     // Late check-out penalty
     const scheduledCheckOut = new Date(`${booking.checkOutDate}T12:00:00`);
     const actualCheckOut = new Date(checkOutTime);
@@ -117,7 +106,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         const description = hoursLate > 6
             ? `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง (คิดเต็มวัน)`
             : `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง @ ฿50/ชม.`;
-
         chargeList.push({
           id: `charge-late-checkout`,
           bookingId: booking.id,
@@ -127,12 +115,10 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         });
       }
     }
-
     // Additional Charges from Booking Details
     if (booking.additionalCharges && booking.additionalCharges.length > 0) {
         chargeList.push(...booking.additionalCharges);
     }
-
     // Deposit Deduction
     if (booking.deposit && booking.deposit > 0) {
       chargeList.push({
@@ -143,7 +129,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         amount: -booking.deposit,
       });
     }
-
     // Penalty (Adjustable)
     if (penalty > 0) {
       chargeList.push({
@@ -154,7 +139,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         amount: penalty,
       });
     }
-
     // Manual Extra Charges
     extraCharges.forEach((charge, index) => {
       // Map UI types to valid DB ChargeType enum
@@ -172,7 +156,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         amount: charge.amount,
       });
     });
-
     // Discount
     if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management')) {
       chargeList.push({
@@ -184,21 +167,16 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         authorizedBy: currentUser.id,
       });
     }
-
     return chargeList;
   }, [booking, rooms, checkOutTime, discount, discountReason, penalty, penaltyReason, currentUser, extraCharges]);
-
   // Total is the sum of charges (Inclusive of VAT)
   const total = useMemo(() => {
     return charges.reduce((sum, charge) => sum + charge.amount, 0);
   }, [charges]);
-
   // Extract VAT and Base Price from the Total
   const vat = useMemo(() => extractVAT(total), [total]);
   const subtotal = useMemo(() => extractBasePrice(total), [total]);
-
   const canApplyDiscount = currentUser.role === 'board' || currentUser.role === 'management';
-
   const handlePayment = async () => {
     // Removed blocking confirm dialog for better UX
     setProcessing(true);
@@ -207,7 +185,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         api.getNextReceiptNumber(),
         api.getNextInvoiceNumber(),
       ]);
-
       const payment: Payment = {
         id: `PAY${Date.now()}`,
         bookingId: booking.id,
@@ -222,18 +199,35 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         vat,
         total,
       };
-
       await api.addPayment(payment);
-
       await api.updateBooking(booking.id, {
         status: 'checked-out',
         actualCheckOutTime: checkOutTime,
       });
-
+      // Update room status and send LINE notifications to housekeepers
       for (const roomId of booking.roomIds) {
         await api.updateRoomStatus(roomId, 'cleaning');
+        
+        // Find the room to get room number and type
+        const room = bookingRooms.find(r => r.id === roomId);
+        if (room) {
+          // Send LINE notification to housekeepers
+          try {
+            const result = await lineService.sendCheckoutAlert(
+              roomId,
+              room.number,
+              room.type,
+              booking.id
+            );
+            if (result.success) {
+              console.log(`LINE notification sent to ${result.sentTo} housekeepers for room ${room.number}`);
+            }
+          } catch (lineErr) {
+            // Don't block checkout if LINE notification fails
+            console.error('Failed to send LINE notification:', lineErr);
+          }
+        }
       }
-
       setReceipt(payment);
       setShowReceipt(true);
     } catch (err) {
@@ -243,16 +237,13 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
       setProcessing(false);
     }
   };
-
   const handlePrintReceipt = () => {
     window.print();
   };
-
   const handleComplete = () => {
     alert('✅ เช็คเอาท์สำเร็จ / Check-out successful!');
     onComplete();
   };
-
   if (showReceipt && receipt) {
     return (
       <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
@@ -278,7 +269,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
               </button>
             </div>
           </div>
-
           <div className="p-8 space-y-8" id="receipt-content">
             {/* Header */}
             <div className="text-center pb-6 border-b border-slate-100 space-y-1">
@@ -297,7 +287,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                 เลขประจำตัวผู้เสียภาษี: 0 9155 66000 11 0 Tax Number 0 9155 66000 11 0 Tel: 088-7673581
               </div>
             </div>
-
             {/* Receipt Numbers Row */}
             <div className="py-2 px-2">
                 <div className="flex justify-between items-end mb-2">
@@ -319,7 +308,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                     </div>
                 </div>
             </div>
-
             {/* Guest Info */}
             <div className="border border-slate-200 rounded-2xl p-6">
               <h3 className="text-slate-800 font-bold mb-4 flex items-center gap-2">
@@ -345,7 +333,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                 </div>
               </div>
             </div>
-
             {/* Charges */}
             <div>
               <h3 className="text-slate-800 font-bold mb-4 flex items-center gap-2">
@@ -383,7 +370,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                 </tfoot>
               </table>
             </div>
-
             {/* Payment Method */}
             <div className="bg-orange-50 border border-orange-100 rounded-2xl p-6 flex items-center justify-between">
               <div>
@@ -396,7 +382,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                 {receipt.method === 'qr' && <><Smartphone className="w-5 h-5"/> QR Code</>}
               </div>
             </div>
-
             <div className="text-center text-slate-400 text-xs pt-6 border-t border-slate-100">
               <p>ขอบคุณที่ใช้บริการ Royyan Resort</p>
             </div>
@@ -405,7 +390,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
       </div>
     );
   }
-
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 border border-slate-100">
@@ -421,7 +405,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
             <X className="w-6 h-6" />
           </button>
         </div>
-
         <div className="p-8 space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Guest Info */}
@@ -453,7 +436,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                 </div>
               </div>
             </div>
-
             {/* Check-out Time */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 h-fit">
                <label className="block text-slate-700 font-bold mb-2 flex items-center gap-2">
@@ -472,7 +454,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
               </p>
             </div>
           </div>
-
           {/* Charges Summary */}
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
              <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
@@ -508,7 +489,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                 </table>
              </div>
           </div>
-
           {/* Optional Services & Extra Expenses */}
           <div className="bg-purple-50/50 border border-purple-200 rounded-2xl p-6 mb-8">
                <h3 className="text-purple-800 font-bold mb-4 flex items-center gap-2">
@@ -559,7 +539,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                       </button>
                   </div>
                </div>
-
                {/* Added Items List */}
                {extraCharges.length > 0 ? (
                  <div className="bg-white rounded-xl border border-purple-100 overflow-hidden">
@@ -588,7 +567,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                  </div>
                )}
           </div>
-
           {/* Discount Section */}
           {canApplyDiscount && (
             <div className="bg-yellow-50/50 border border-yellow-200 rounded-2xl p-6">
@@ -619,7 +597,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                </div>
             </div>
           )}
-
           {/* Penalty Section */}
           <div className="bg-red-50/50 border border-red-200 rounded-2xl p-6">
                <h3 className="text-red-800 font-bold mb-4 flex items-center gap-2">
@@ -648,7 +625,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                   </div>
                </div>
           </div>
-
           {/* Payment Method Selection */}
           <div>
             <label className="block text-slate-700 font-bold mb-4">เลือกวิธีการชำระเงิน</label>
@@ -688,7 +664,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
               </button>
             </div>
           </div>
-
           {/* Final Action Buttons */}
           <div className="flex gap-4 pt-6 border-t border-slate-100">
             <button

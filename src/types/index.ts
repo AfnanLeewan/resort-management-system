@@ -147,3 +147,70 @@ export interface InventoryTransaction {
   createdAt: string;
   createdBy: string;
 }
+
+// LINE Integration Types
+export interface StaffLineMapping {
+  id: string;
+  userId: string;
+  lineUserId: string;
+  displayName?: string;
+  pictureUrl?: string;
+  registrationCode?: string;
+  status: 'active' | 'inactive' | 'pending';
+  richMenuId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LineNotification {
+  id: string;
+  recipientUserId?: string;
+  recipientLineId: string;
+  notificationType: 'checkout_alert' | 'repair_request' | 'repair_complete' | 'clean_complete';
+  relatedRoomId?: string;
+  relatedMaintenanceId?: string;
+  messageContent?: Record<string, any>;
+  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+  errorMessage?: string;
+  sentAt?: string;
+  createdAt: string;
+}
+
+export interface LineCleaningTask {
+  id: string;
+  roomId: string;
+  bookingId?: string;
+  assignedTo?: string;
+  status: 'pending' | 'accepted' | 'in_progress' | 'completed' | 'inspected' | 'needs_repair' | 'pending_repair_details';
+  checkoutTime?: string;
+  acceptedAt?: string;
+  completedAt?: string;
+  inspectedAt?: string;
+  inspectedBy?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface LineRegistrationCode {
+  id: string;
+  userId: string;
+  code: string;
+  expiresAt: string;
+  usedAt?: string;
+  usedByLineId?: string;
+  createdAt: string;
+}
+
+export interface LineBotConfig {
+  id: string;
+  channelId?: string;
+  channelSecret?: string;
+  channelAccessToken?: string;
+  housekeeperRichMenuId?: string;
+  technicianRichMenuId?: string;
+  adminRichMenuId?: string;
+  webhookUrl?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

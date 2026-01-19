@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { User, UserRole, AttendanceRecord } from '../types';
 import * as api from '../utils/api';
+import * as lineService from '../utils/lineService';
 import { 
   Users, 
   UserPlus, 
@@ -20,7 +21,10 @@ import {
   History,
   FileText,
   Search,
-  Loader2
+  Loader2,
+  MessageSquare,
+  Copy,
+  Check
 } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { format, parseISO } from 'date-fns';
@@ -41,6 +45,10 @@ export function StaffDashboard() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [isLineModalOpen, setIsLineModalOpen] = useState(false);
+  const [lineCodeUser, setLineCodeUser] = useState<User | null>(null);
+  const [lineCode, setLineCode] = useState<string>('');
+  const [lineCodeLoading, setLineCodeLoading] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState("overview");
@@ -90,6 +98,27 @@ export function StaffDashboard() {
   const handleAddUser = () => {
       setEditingUser(null);
       setIsModalOpen(true);
+  };
+
+  const handleGenerateLineCode = async (user: User) => {
+    setLineCodeUser(user);
+    setLineCode('');
+    setIsLineModalOpen(true);
+    setLineCodeLoading(true);
+    
+    try {
+      const code = await lineService.generateRegistrationCode(user.id);
+      if (code) {
+        setLineCode(code);
+      } else {
+        setLineCode('ERROR');
+      }
+    } catch (err) {
+      console.error('Failed to generate LINE code:', err);
+      setLineCode('ERROR');
+    } finally {
+      setLineCodeLoading(false);
+    }
   };
 
   const stats = {
@@ -179,6 +208,7 @@ export function StaffDashboard() {
                         onAttendance={handleAttendance}
                         onEdit={() => handleEditUser(user)}
                         onDelete={() => handleDeleteUser(user.id)}
+                        onGenerateLineCode={() => handleGenerateLineCode(user)}
                     />
                 ))}
              </div>
@@ -208,6 +238,15 @@ export function StaffDashboard() {
                 setIsLeaveModalOpen(false);
                 loadData();
             }}
+        />
+      )}
+
+      {isLineModalOpen && lineCodeUser && (
+        <LineCodeModal 
+            user={lineCodeUser}
+            code={lineCode}
+            loading={lineCodeLoading}
+            onClose={() => setIsLineModalOpen(false)}
         />
       )}
     </div>
@@ -384,18 +423,130 @@ function LeaveModal({ users, onClose, onSuccess }: { users: User[], onClose: () 
     );
 }
 
+function LineCodeModal({ 
+    user, 
+    code, 
+    loading, 
+    onClose 
+}: { 
+    user: User, 
+    code: string, 
+    loading: boolean, 
+    onClose: () => void 
+}) {
+    const [copied, setCopied] = useState(false);
+    
+    const handleCopy = () => {
+        const textToCopy = `ลงทะเบียน ${code}`;
+        navigator.clipboard.writeText(textToCopy);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <MessageSquare className="w-6 h-6 text-green-600" />
+                        รหัสลงทะเบียน LINE
+                    </h3>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
+                        <XCircle className="w-6 h-6" />
+                    </button>
+                </div>
+
+                <div className="text-center mb-6">
+                    <div className="text-sm text-slate-500 mb-2">สำหรับพนักงาน</div>
+                    <div className="text-lg font-bold text-slate-800">{user.name}</div>
+                    <div className="text-sm text-slate-400 mt-1">{user.role}</div>
+                </div>
+
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center py-8">
+                        <Loader2 className="w-12 h-12 text-green-500 animate-spin mb-4" />
+                        <div className="text-slate-500">กำลังสร้างรหัส...</div>
+                    </div>
+                ) : code === 'ERROR' ? (
+                    <div className="bg-red-50 text-red-600 p-6 rounded-2xl text-center">
+                        <XCircle className="w-12 h-12 mx-auto mb-4" />
+                        <div className="font-bold">เกิดข้อผิดพลาด</div>
+                        <div className="text-sm mt-2">ไม่สามารถสร้างรหัสได้ กรุณาลองใหม่อีกครั้ง</div>
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 text-center">
+                            <div className="text-sm text-green-600 font-medium mb-2">รหัสลงทะเบียน (หมดอายุใน 24 ชม.)</div>
+                            <div className="text-4xl font-mono font-bold text-green-700 tracking-widest">
+                                {code}
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-50 rounded-2xl p-4">
+                            <div className="text-xs text-slate-500 font-medium mb-2">วิธีใช้งาน:</div>
+                            <div className="text-sm text-slate-700 space-y-2">
+                                <div className="flex items-start gap-2">
+                                    <span className="bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">1</span>
+                                    <span>พนักงานเพิ่ม LINE Official Account เป็นเพื่อน</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                    <span className="bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">2</span>
+                                    <span>พิมพ์ข้อความใน LINE:</span>
+                                </div>
+                                <div className="ml-7 bg-white border border-slate-200 rounded-lg p-3 font-mono text-sm flex items-center justify-between">
+                                    <span>ลงทะเบียน {code}</span>
+                                    <button 
+                                        onClick={handleCopy}
+                                        className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                                        title="คัดลอก"
+                                    >
+                                        {copied ? (
+                                            <Check className="w-4 h-4 text-green-600" />
+                                        ) : (
+                                            <Copy className="w-4 h-4 text-slate-400" />
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={handleCopy}
+                            className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-bold text-lg shadow-lg shadow-green-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                        >
+                            {copied ? (
+                                <>
+                                    <Check className="w-5 h-5" />
+                                    คัดลอกแล้ว!
+                                </>
+                            ) : (
+                                <>
+                                    <Copy className="w-5 h-5" />
+                                    คัดลอกข้อความ
+                                </>
+                            )}
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function StaffCard({ 
     user, 
     onStatusToggle, 
     onAttendance,
     onEdit,
-    onDelete
+    onDelete,
+    onGenerateLineCode
 }: { 
     user: User, 
     onStatusToggle: () => void, 
     onAttendance: (id: string, type: 'check-in' | 'check-out') => void,
     onEdit: () => void,
-    onDelete: () => void
+    onDelete: () => void,
+    onGenerateLineCode: () => void
 }) {
     const isOnDuty = user.status === 'on-duty';
     
@@ -416,10 +567,14 @@ function StaffCard({
                             <MoreHorizontal className="w-5 h-5" />
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-40">
+                    <DropdownMenuContent align="start" className="w-48">
                         <DropdownMenuItem onClick={onEdit} className="cursor-pointer">
                             <Pencil className="w-4 h-4 mr-2" />
                             แก้ไขข้อมูล
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={onGenerateLineCode} className="cursor-pointer text-green-600 focus:text-green-600 focus:bg-green-50">
+                            <MessageSquare className="w-4 h-4 mr-2" />
+                            สร้างรหัส LINE
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={onDelete} className="text-red-600 cursor-pointer focus:text-red-600 focus:bg-red-50">

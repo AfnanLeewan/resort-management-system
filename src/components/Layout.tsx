@@ -38,6 +38,7 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
     { id: 'staff', label: 'พนักงาน', icon: Users, roles: ['management', 'board', 'front-desk'] },
     { id: 'housekeeping', label: 'แม่บ้าน', icon: Wrench, roles: ['housekeeping', 'management'] },
     { id: 'maintenance', label: 'รายการแจ้งซ่อม', icon: Wrench, roles: ['management', 'front-desk', 'housekeeping', 'repair'] },
+    { id: 'line-settings', label: 'ตั้งค่า LINE', icon: MessageSquare, roles: ['management'] },
     { id: 'inventory', label: 'คลังพัสดุ', icon: Package, roles: ['management', 'housekeeping', 'front-desk'] },
     { id: 'reports', label: 'รายงาน', icon: BarChart3, roles: ['management', 'board'] },
   ];

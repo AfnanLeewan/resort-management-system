@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Room, User, MaintenanceReport } from '../types';
 import { Wrench, X, MessageSquare, AlertTriangle, Loader2 } from 'lucide-react';
 import * as api from '../utils/api';
+import * as lineService from '../utils/lineService';
 
 interface MaintenanceReportModalProps {
   room: Room;
@@ -35,8 +36,9 @@ export function MaintenanceReportModal({
 
     setSaving(true);
     try {
+      const reportId = `MR${Date.now()}`;
       const report: MaintenanceReport = {
-        id: `MR${Date.now()}`,
+        id: reportId,
         roomId: room.id,
         reportedBy: currentUser.id,
         description: description.trim(),
@@ -51,8 +53,23 @@ export function MaintenanceReportModal({
       // Update room status to maintenance
       await api.updateRoomStatus(room.id, 'maintenance');
 
-      // Show success notification
-      alert(`📱 LINE Notification Sent!\n\n⚠️ แจ้งซ่อม ห้อง ${getRoomLabel(room.number)}\n${description}\nระดับความเร่งด่วน: ${priority === 'high' ? 'ด่วนที่สุด' : priority === 'medium' ? 'ปานกลาง' : 'ปกติ'}\n\nระบบจะส่งการแจ้งเตือนไปยัง LINE ของผู้จัดการ`);
+      // Send LINE notification to technicians
+      try {
+        const result = await lineService.sendRepairRequestNotification(
+          reportId,
+          room.id,
+          room.number,
+          description.trim(),
+          priority,
+          currentUser.name
+        );
+        if (result.success) {
+          console.log(`LINE notification sent to ${result.sentTo} technicians`);
+        }
+      } catch (lineErr) {
+        // Don't block the report if LINE notification fails
+        console.error('Failed to send LINE notification:', lineErr);
+      }
 
       onSuccess();
     } catch (err) {
