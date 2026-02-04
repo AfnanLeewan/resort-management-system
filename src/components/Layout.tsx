@@ -14,10 +14,11 @@ import {
   MessageSquare,
   Menu,
   ChevronRight,
-  Package
+  Package,
+  Settings
 } from 'lucide-react';
 import { QuickGuide } from './QuickGuide';
-import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
+import logo from "../assets/Royyan_logo.JPG";
 
 interface LayoutProps {
   children: ReactNode;
@@ -35,6 +36,7 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
     { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard, roles: ['front-desk', 'management', 'board'] },
     { id: 'frontdesk', label: 'เคาน์เตอร์', icon: DoorOpen, roles: ['front-desk', 'management'] },
     { id: 'rooms', label: 'สถานะห้องพัก', icon: Bed, roles: ['front-desk', 'housekeeping', 'management', 'repair'] },
+    { id: 'room-management', label: 'จัดการห้องพัก', icon: Settings, roles: ['management'] },
     { id: 'staff', label: 'พนักงาน', icon: Users, roles: ['management', 'board', 'front-desk'] },
     { id: 'housekeeping', label: 'แม่บ้าน', icon: Wrench, roles: ['housekeeping', 'management'] },
     { id: 'maintenance', label: 'รายการแจ้งซ่อม', icon: Wrench, roles: ['management', 'front-desk', 'housekeeping', 'repair'] },

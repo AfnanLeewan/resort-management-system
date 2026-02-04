@@ -322,6 +322,64 @@ export async function updateRoomStatus(
   }
 }
 
+export async function addRoom(room: Room): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.addRoom(room);
+    return;
+  }
+
+  const { error } = await supabase.from('rooms').insert({
+    number: room.number,
+    type: room.type,
+    status: room.status,
+  } as any);
+
+  if (error) {
+    console.error('Error adding room:', error);
+    throw error;
+  }
+}
+
+export async function updateRoom(roomId: string, updates: Partial<Room>): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.updateRoom(roomId, updates);
+    return;
+  }
+
+  const dbUpdates: any = {};
+  if (updates.number !== undefined) dbUpdates.number = updates.number;
+  if (updates.type !== undefined) dbUpdates.type = updates.type;
+  if (updates.status !== undefined) dbUpdates.status = updates.status;
+  if (updates.currentBookingId !== undefined) dbUpdates.current_booking_id = updates.currentBookingId;
+
+  const { error } = await supabase
+    .from('rooms')
+    .update(dbUpdates)
+    .eq('id', roomId);
+
+  if (error) {
+    console.error('Error updating room:', error);
+    throw error;
+  }
+}
+
+export async function deleteRoom(roomId: string): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.deleteRoom(roomId);
+    return;
+  }
+
+  const { error } = await supabase
+    .from('rooms')
+    .delete()
+    .eq('id', roomId);
+
+  if (error) {
+    console.error('Error deleting room:', error);
+    throw error;
+  }
+}
+
 // =====================================================
 // BOOKINGS API
 // =====================================================
@@ -614,6 +672,49 @@ export async function addPayment(payment: Payment): Promise<void> {
 
   if (error) {
     console.error('Error adding payment:', error.message, error.details, error.hint);
+    throw error;
+  }
+}
+
+export async function deletePayment(paymentId: string): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.deletePayment(paymentId);
+    return;
+  }
+
+  // First, get the payment to find its booking_id for deleting charges
+  const { data: payment, error: fetchError } = await supabase
+    .from('payments')
+    .select('booking_id')
+    .eq('id', paymentId)
+    .single();
+
+  if (fetchError) {
+    console.error('Error fetching payment for deletion:', fetchError);
+    throw fetchError;
+  }
+
+  // Delete associated charges first
+  if (payment?.booking_id) {
+    const { error: chargesError } = await supabase
+      .from('charges')
+      .delete()
+      .eq('booking_id', payment.booking_id);
+
+    if (chargesError) {
+      console.error('Error deleting charges:', chargesError);
+      // Continue with payment deletion anyway
+    }
+  }
+
+  // Delete the payment
+  const { error } = await supabase
+    .from('payments')
+    .delete()
+    .eq('id', paymentId);
+
+  if (error) {
+    console.error('Error deleting payment:', error);
     throw error;
   }
 }

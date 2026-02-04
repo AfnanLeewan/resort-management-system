@@ -148,6 +148,27 @@ export function updateRoomStatus(
   }
 }
 
+export function addRoom(room: Room): void {
+  const rooms = getRooms();
+  rooms.push(room);
+  saveRooms(rooms);
+}
+
+export function updateRoom(roomId: string, updates: Partial<Room>): void {
+  const rooms = getRooms();
+  const index = rooms.findIndex((r) => r.id === roomId);
+  if (index !== -1) {
+    rooms[index] = { ...rooms[index], ...updates };
+    saveRooms(rooms);
+  }
+}
+
+export function deleteRoom(roomId: string): void {
+  const rooms = getRooms();
+  const newRooms = rooms.filter((r) => r.id !== roomId);
+  saveRooms(newRooms);
+}
+
 // Booking operations
 export function getBookings(): Booking[] {
   return loadFromStorage<Booking[]>(STORAGE_KEYS.BOOKINGS, []);
@@ -188,6 +209,12 @@ export function addPayment(payment: Payment): void {
   const payments = getPayments();
   payments.push(payment);
   savePayments(payments);
+}
+
+export function deletePayment(paymentId: string): void {
+  const payments = getPayments();
+  const newPayments = payments.filter(p => p.id !== paymentId);
+  savePayments(newPayments);
 }
 
 // Maintenance operations

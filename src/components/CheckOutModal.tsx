@@ -4,13 +4,14 @@ import * as api from '../utils/api';
 import * as lineService from '../utils/lineService';
 import { calculateNights, calculateHoursDifference, extractVAT, extractBasePrice, calculateEarlyCheckInCharge, calculateLateCheckOutCharge } from '../utils/pricing';
 import { formatCurrency, formatDateTime, getCurrentLocalDateTime } from '../utils/dateHelpers';
-import { X, Printer, CreditCard, Banknote, Smartphone, Check, Clock, FileText, User as UserIcon, Building, Info, Loader2, ShoppingBag, Trash2, Plus } from 'lucide-react';
-import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
+import { X, Printer, CreditCard, Banknote, Smartphone, Check, Clock, FileText, User as UserIcon, Building, Info, Loader2, ShoppingBag, Trash2, Plus, LogOut } from 'lucide-react';
+import logo from "../assets/Royyan_logo.JPG";
 interface CheckOutModalProps {
   booking: Booking;
   onClose: () => void;
   onComplete: () => void;
   currentUser: User;
+  existingPayment?: Payment | null; // If provided, show receipt view directly
 }
 const getChargeLabel = (type: string) => {
   switch(type) {
@@ -20,15 +21,15 @@ const getChargeLabel = (type: string) => {
     default: return 'อื่นๆ';
   }
 };
-export function CheckOutModal({ booking, onClose, onComplete, currentUser }: CheckOutModalProps) {
+export function CheckOutModal({ booking, onClose, onComplete, currentUser, existingPayment }: CheckOutModalProps) {
   const [checkOutTime, setCheckOutTime] = useState(getCurrentLocalDateTime());
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'qr'>('cash');
   const [discount, setDiscount] = useState(0);
   const [discountReason, setDiscountReason] = useState('');
   const [penalty, setPenalty] = useState(0);
   const [penaltyReason, setPenaltyReason] = useState('');
-  const [showReceipt, setShowReceipt] = useState(false);
-  const [receipt, setReceipt] = useState<Payment | null>(null);
+  const [showReceipt, setShowReceipt] = useState(!!existingPayment);
+  const [receipt, setReceipt] = useState<Payment | null>(existingPayment || null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -58,60 +59,70 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
     };
     loadRooms();
   }, []);
+
   const bookingRooms = rooms.filter(r => booking.roomIds.includes(r.id));
   const roomNumbers = bookingRooms.map(r => r.number).join(', ');
   // Calculate charges
   const charges = useMemo<Charge[]>(() => {
     const chargeList: Charge[] = [];
     const nights = calculateNights(booking.checkInDate, booking.checkOutDate);
-    // Room charges
+    const numberOfRooms = booking.roomIds.length;
+    
+    // Per-room rate: baseRate is the rate per room, not total
+    const perRoomRate = booking.baseRate;
+    
+    // Room charges - each room is charged the per-room rate
     booking.roomIds.forEach((roomId, index) => {
       const room = rooms.find(r => r.id === roomId);
       chargeList.push({
         id: `charge-room-${index}`,
         bookingId: booking.id,
         type: 'room',
-        description: `ห้อง ${room?.number} - ${nights} คืน @ ฿${booking.baseRate}`,
-        amount: booking.baseRate * nights,
+        description: `ห้อง ${room?.number} - ${nights} คืน @ ฿${perRoomRate}`,
+        amount: perRoomRate * nights,
       });
     });
-    // Early check-in penalty
+    // Early check-in penalty - calculated once for the booking, not per room
     if (booking.actualCheckInTime) {
       const scheduledCheckIn = new Date(`${booking.checkInDate}T14:00:00`);
       const actualCheckIn = new Date(booking.actualCheckInTime);
       if (actualCheckIn < scheduledCheckIn) {
         const hoursEarly = calculateHoursDifference(booking.actualCheckInTime, scheduledCheckIn.toISOString());
         if (hoursEarly > 0) {
-          const amount = calculateEarlyCheckInCharge(hoursEarly, booking.baseRate);
+          // Early check-in charge is calculated per room, then multiplied by number of rooms
+          const perRoomEarlyCharge = calculateEarlyCheckInCharge(hoursEarly, perRoomRate);
+          const totalEarlyCharge = perRoomEarlyCharge * numberOfRooms;
           const description = hoursEarly > 6 
-            ? `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง (คิดเต็มวัน)`
-            : `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง @ ฿50/ชม.`;
+            ? `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง (คิดเต็มวัน) x ${numberOfRooms} ห้อง`
+            : `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง @ ฿50/ชม. x ${numberOfRooms} ห้อง`;
           chargeList.push({
             id: `charge-early-checkin`,
             bookingId: booking.id,
             type: 'early-checkin',
             description,
-            amount,
+            amount: totalEarlyCharge,
           });
         }
       }
     }
-    // Late check-out penalty
+    // Late check-out penalty - calculated for each room
     const scheduledCheckOut = new Date(`${booking.checkOutDate}T12:00:00`);
     const actualCheckOut = new Date(checkOutTime);
     if (actualCheckOut > scheduledCheckOut) {
       const hoursLate = calculateHoursDifference(scheduledCheckOut.toISOString(), checkOutTime);
       if (hoursLate > 0) {
-        const amount = calculateLateCheckOutCharge(hoursLate, booking.baseRate);
+        // Late checkout charge is calculated per room, then multiplied by number of rooms
+        const perRoomLateCharge = calculateLateCheckOutCharge(hoursLate, perRoomRate);
+        const totalLateCharge = perRoomLateCharge * numberOfRooms;
         const description = hoursLate > 6
-            ? `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง (คิดเต็มวัน)`
-            : `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง @ ฿50/ชม.`;
+            ? `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง (คิดเต็มวัน) x ${numberOfRooms} ห้อง`
+            : `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง @ ฿50/ชม. x ${numberOfRooms} ห้อง`;
         chargeList.push({
           id: `charge-late-checkout`,
           bookingId: booking.id,
           type: 'late-checkout',
           description,
-          amount,
+          amount: totalLateCharge,
         });
       }
     }
@@ -185,6 +196,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         api.getNextReceiptNumber(),
         api.getNextInvoiceNumber(),
       ]);
+
       const payment: Payment = {
         id: `PAY${Date.now()}`,
         bookingId: booking.id,
@@ -199,12 +211,41 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
         vat,
         total,
       };
+
       await api.addPayment(payment);
+      
+      // Update booking to 'checked-in' (no-op) or just skip status update
+      // We don't set 'paid' status in DB because it might be restricted by ENUM
+      // The existence of a Payment record implies 'paid' status in the UI
+      /* 
       await api.updateBooking(booking.id, {
-        status: 'checked-out',
-        actualCheckOutTime: checkOutTime,
+        actualCheckOutTime: checkOutTime, // Optional: verify if we should set this now or later
       });
-      // Update room status and send LINE notifications to housekeepers
+      */
+
+      setReceipt(payment);
+      setShowReceipt(true);
+      
+      // We don't close the modal yet, showing receipt first
+    } catch (err) {
+      console.error('Payment failed:', err);
+      alert('❌ ไม่สามารถบันทึกการชำระเงินได้');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleFinalizeCheckOut = async () => {
+    if (!confirm('ยืนยันการเช็คเอาท์? ห้องจะถูกเปลี่ยนสถานะเป็น "ทำความสะอาด"')) return;
+    
+    setProcessing(true);
+    try {
+        await api.updateBooking(booking.id, {
+            status: 'checked-out',
+            actualCheckOutTime: checkOutTime,
+        });
+
+       // Update room status and send LINE notifications to housekeepers
       for (const roomId of booking.roomIds) {
         await api.updateRoomStatus(roomId, 'cleaning');
         
@@ -228,13 +269,15 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
           }
         }
       }
-      setReceipt(payment);
-      setShowReceipt(true);
+      
+      alert('✅ เช็คเอาท์สำเร็จ / Check-out successful!');
+      onComplete();
+
     } catch (err) {
-      console.error('Payment failed:', err);
-      alert('❌ ไม่สามารถบันทึกการชำระเงินได้');
+        console.error('Checkout failed:', err);
+        alert('❌ ไม่สามารถเช็คเอาท์ได้');
     } finally {
-      setProcessing(false);
+        setProcessing(false);
     }
   };
   const handlePrintReceipt = () => {
@@ -261,11 +304,23 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
                 <Printer className="w-5 h-5" />
                 <span>พิมพ์</span>
               </button>
+              
+              {/* If payment successful (receipt exists), allow checkout. If checking out (final), show close */}
+              {receipt ? (
+                  <button
+                    onClick={handleFinalizeCheckOut}
+                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl transition-colors font-bold shadow-lg shadow-blue-200"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span>เช็คเอาท์ทันที</span>
+                  </button>
+              ) : null}
+
               <button
-                onClick={handleComplete}
+                onClick={onClose}
                 className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-2xl transition-colors font-bold shadow-lg shadow-green-200"
               >
-                เสร็จสิ้น
+                ปิดหน้าต่าง
               </button>
             </div>
           </div>
@@ -665,24 +720,52 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser }: Che
             </div>
           </div>
           {/* Final Action Buttons */}
+          {/* Final Action Buttons */}
           <div className="flex gap-4 pt-6 border-t border-slate-100">
-            <button
-              onClick={handlePayment}
-              disabled={processing}
-              className="flex-1 bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-bold shadow-lg shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                  กำลังประมวลผล...
-                </>
-              ) : (
-                <>
-                  <CreditCard className="w-6 h-6" />
-                  ชำระเงิน {formatCurrency(total)}
-                </>
-              )}
-            </button>
+            {/* If we have a receipt (just paid) OR logic in parent implies paid, show Check Out
+                But here we only track local 'receipt' state for "Just Paid" scenario within this modal session.
+                Ideally we should pass 'isPaid' prop or check existing payments.
+                For now, rely on local 'receipt' state or check passed props if available. 
+                Actually, let's allow "Check Out" if we have a receipt set.
+            */}
+            {receipt ? (
+                 <button
+                 onClick={handleFinalizeCheckOut}
+                 disabled={processing}
+                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                 {processing ? (
+                   <>
+                     <Loader2 className="w-6 h-6 animate-spin" />
+                     กำลังเช็คเอาท์...
+                   </>
+                 ) : (
+                   <>
+                     <LogOut className="w-6 h-6" />
+                     ยืนยันเช็คเอาท์ (Check Out)
+                   </>
+                 )}
+               </button>
+            ) : (
+                <button
+                onClick={handlePayment}
+                disabled={processing}
+                className="flex-1 bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-bold shadow-lg shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                {processing ? (
+                    <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    กำลังประมวลผล...
+                    </>
+                ) : (
+                    <>
+                    <CreditCard className="w-6 h-6" />
+                    รับชำระเงิน {formatCurrency(total)}
+                    </>
+                )}
+                </button>
+            )}
+            
             <button
               onClick={onClose}
               className="px-8 py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all"

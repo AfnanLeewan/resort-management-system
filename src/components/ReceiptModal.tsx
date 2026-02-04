@@ -1,7 +1,7 @@
 import { Payment, Booking } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/dateHelpers';
 import { Printer, User as UserIcon, FileText, Banknote, Building, Smartphone } from 'lucide-react';
-import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
+import logo from "../assets/Royyan_logo.JPG";
 
 interface ReceiptModalProps {
   booking: Booking;

@@ -21,6 +21,7 @@ interface FrontDeskProps {
 export function FrontDesk({ currentUser }: FrontDeskProps) {
   const [view, setView] = useState<'list' | 'new-booking'>('list');
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,6 +34,9 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
   const [showCheckOut, setShowCheckOut] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
+  
+  // Month filter for bookings list
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
   // New booking form state
   const [newBooking, setNewBooking] = useState({
@@ -56,12 +60,14 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
 
   const loadData = async () => {
     try {
-      const [loadedBookings, loadedRooms] = await Promise.all([
+      const [loadedBookings, loadedRooms, loadedPayments] = await Promise.all([
         api.getBookings(),
         api.getRooms(),
+        api.getPayments(),
       ]);
       setBookings(loadedBookings);
       setRooms(loadedRooms);
+      setPayments(loadedPayments);
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
@@ -82,15 +88,24 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
   }, [rooms]);
 
   const filteredBookings = useMemo(() => {
-    if (!searchTerm) return bookings;
-    const term = searchTerm.toLowerCase();
-    return bookings.filter(b => 
-      b.guest.name.toLowerCase().includes(term) ||
-      b.guest.phone.includes(term) ||
-      b.guest.idNumber.toLowerCase().includes(term) ||
-      b.id.toLowerCase().includes(term)
-    );
-  }, [bookings, searchTerm]);
+    let result = bookings;
+    
+    // Filter by month (check-in date starts with selected month)
+    result = result.filter(b => b.checkInDate.startsWith(selectedMonth));
+    
+    // Filter by search term
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(b => 
+        b.guest.name.toLowerCase().includes(term) ||
+        b.guest.phone.includes(term) ||
+        b.guest.idNumber.toLowerCase().includes(term) ||
+        b.id.toLowerCase().includes(term)
+      );
+    }
+    
+    return result;
+  }, [bookings, searchTerm, selectedMonth]);
 
   const todayBookings = useMemo(() => {
     const today = getTodayDateString();
@@ -216,22 +231,41 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     });
   };
 
-  const getStatusBadge = (status: Booking['status']) => {
-    const styles = {
-      'reserved': 'bg-blue-50 text-blue-700 border-blue-200',
-      'checked-in': 'bg-green-50 text-green-700 border-green-200',
-      'checked-out': 'bg-slate-100 text-slate-600 border-slate-200',
-      'cancelled': 'bg-red-50 text-red-700 border-red-200',
-    };
-    const labels = {
-      'reserved': 'จองล่วงหน้า',
-      'checked-in': 'เข้าพักอยู่',
-      'checked-out': 'เช็คเอาท์แล้ว',
-      'cancelled': 'ยกเลิก',
-    };
+  const getStatusBadge = (booking: Booking) => {
+    const isPaid = payments.some(p => p.bookingId === booking.id);
+    
+    let label = '';
+    let style = '';
+
+    switch (booking.status) {
+        case 'reserved':
+            label = 'จองล่วงหน้า';
+            style = 'bg-blue-50 text-blue-700 border-blue-200';
+            break;
+        case 'checked-in':
+            if (isPaid) {
+                label = 'ชำระเงินแล้ว';
+                style = 'bg-purple-50 text-purple-700 border-purple-200';
+            } else {
+                label = 'เข้าพักอยู่';
+                style = 'bg-green-50 text-green-700 border-green-200';
+            }
+            break;
+        case 'checked-out':
+            label = 'เช็คเอาท์แล้ว';
+            style = 'bg-slate-100 text-slate-600 border-slate-200';
+            break;
+        case 'cancelled':
+            label = 'ยกเลิก';
+            style = 'bg-red-50 text-red-700 border-red-200';
+            break;
+        default:
+            return null;
+    }
+
     return (
-      <span className={`px-3 py-1 rounded-lg border text-xs font-bold ${styles[status]}`}>
-        {labels[status]}
+      <span className={`px-3 py-1 rounded-lg border text-xs font-bold ${style}`}>
+        {label}
       </span>
     );
   };
@@ -557,7 +591,24 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
       </div>
 
       {/* Search & Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+         {/* Month Selector */}
+         <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex items-center gap-3">
+            <div className="p-2 bg-blue-50 rounded-xl">
+               <CalendarIcon className="w-5 h-5 text-blue-500" />
+            </div>
+            <div className="flex-1">
+               <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-0.5">เดือน/ปี</div>
+               <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="text-sm font-bold text-slate-700 outline-none bg-transparent cursor-pointer w-full"
+               />
+            </div>
+         </div>
+         
+         {/* Search */}
          <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
             <Search className="w-6 h-6 text-slate-400" />
             <input
@@ -568,6 +619,8 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
                 className="w-full text-lg outline-none placeholder:text-slate-300 text-slate-800"
             />
          </div>
+         
+         {/* Today's Activity */}
          <div className="bg-slate-800 rounded-3xl p-6 text-white flex items-center justify-between shadow-lg shadow-slate-200">
             <div>
                 <div className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-1">กิจกรรมวันนี้</div>

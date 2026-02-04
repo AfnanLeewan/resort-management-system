@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { User, Booking, Payment, Room } from '../types';
 import * as api from '../utils/api';
 import { formatCurrency, formatDateTime } from '../utils/dateHelpers';
-import { Download, FileText, DollarSign, TrendingUp, Calendar, Printer, CreditCard, Banknote, Smartphone, Building, Info, Loader2 } from 'lucide-react';
+import { formatRoomName } from '../utils/roomHelpers';
+import { Download, FileText, DollarSign, TrendingUp, Calendar, Printer, CreditCard, Banknote, Smartphone, Building, Info, Loader2, Trash2 } from 'lucide-react';
 
 interface ReportsProps {
   currentUser: User;
@@ -15,6 +16,7 @@ export function Reports({ currentUser }: ReportsProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   // Load data on mount
   useEffect(() => {
@@ -120,6 +122,25 @@ export function Reports({ currentUser }: ReportsProps) {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDeletePayment = async (paymentId: string, receiptNumber: string) => {
+    if (!confirm(`คุณต้องการลบรายการ ${receiptNumber} หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
+      return;
+    }
+    
+    setDeleting(paymentId);
+    try {
+      await api.deletePayment(paymentId);
+      // Refresh payments list
+      const updatedPayments = await api.getPayments();
+      setPayments(updatedPayments);
+    } catch (err) {
+      console.error('Failed to delete payment:', err);
+      alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment');
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const StatCard = ({ icon: Icon, title, value, subtitle, colorClass, iconBg }: { icon: any, title: string, value: string, subtitle: string, colorClass: string, iconBg: string }) => (
@@ -293,19 +314,20 @@ export function Reports({ currentUser }: ReportsProps) {
           <table className="w-full text-sm text-left">
             <thead className="bg-white border-b border-slate-200">
               <tr>
-                <th className="px-6 py-4 w-[15%] text-xs font-bold text-slate-400 uppercase tracking-wider">วันที่</th>
-                <th className="px-6 py-4 w-[15%] text-xs font-bold text-slate-400 uppercase tracking-wider">ใบเสร็จ</th>
-                <th className="px-6 py-4 w-[20%] text-xs font-bold text-slate-400 uppercase tracking-wider">ลูกค้า</th>
-                <th className="px-6 py-4 w-[15%] text-xs font-bold text-slate-400 uppercase tracking-wider">ห้อง</th>
-                <th className="px-6 py-4 w-[15%] text-xs font-bold text-slate-400 uppercase tracking-wider text-right">ยอดรวม</th>
-                <th className="px-6 py-4 w-[20%] text-xs font-bold text-slate-400 uppercase tracking-wider text-right">วิธีชำระ</th>
+                <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider">วันที่</th>
+                <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider">ใบเสร็จ</th>
+                <th className="px-6 py-4 w-[18%] text-xs font-bold text-slate-400 uppercase tracking-wider">ลูกค้า</th>
+                <th className="px-6 py-4 w-[10%] text-xs font-bold text-slate-400 uppercase tracking-wider">ห้อง</th>
+                <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider text-right">ยอดรวม</th>
+                <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider text-right">วิธีชำระ</th>
+                <th className="px-6 py-4 w-[8%] text-xs font-bold text-slate-400 uppercase tracking-wider text-center">จัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {monthPayments.map(payment => {
                 const booking = bookings.find(b => b.id === payment.bookingId);
                 const bookingRooms = booking ? rooms.filter(r => booking.roomIds.includes(r.id)) : [];
-                const roomNumbers = bookingRooms.map(r => r.number).join(', ');
+                const roomNumbers = bookingRooms.map(r => formatRoomName(r.number)).join(', ');
                 
                 return (
                   <tr key={payment.id} className="hover:bg-slate-50 transition-colors">
@@ -328,12 +350,26 @@ export function Reports({ currentUser }: ReportsProps) {
                           {payment.method}
                        </span>
                     </td>
+                    <td className="px-6 py-4 text-center">
+                       <button
+                          onClick={() => handleDeletePayment(payment.id, payment.receiptNumber)}
+                          disabled={deleting === payment.id}
+                          className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                          title="ลบรายการ"
+                       >
+                          {deleting === payment.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                       </button>
+                    </td>
                   </tr>
                 );
               })}
               {monthPayments.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-24 text-center text-slate-400">
+                  <td colSpan={7} className="px-6 py-24 text-center text-slate-400">
                     <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
                     <p className="font-medium">ไม่พบรายการในเดือนนี้</p>
                   </td>

@@ -299,6 +299,31 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
                บันทึกการเปลี่ยนแปลง
              </button>
           </div>
+
+          {/* Danger Zone */}
+          {booking.status === 'reserved' && (
+             <div className="pt-6 border-t border-slate-100 mt-2">
+                <button
+                   onClick={async () => {
+                      if (confirm('คุณแน่ใจหรือไม่ที่จะยกเลิกการจองนี้? การกระทำนี้ไม่สามารถย้อนกลับได้')) {
+                         try {
+                            await api.updateBooking(booking.id, { status: 'cancelled' });
+                            alert('ยกเลิกการจองเรียบร้อยแล้ว');
+                            onUpdate();
+                            onClose();
+                         } catch (err) {
+                            console.error('Failed to cancel booking:', err);
+                            alert('❌ ไม่สามารถยกเลิกการจองได้');
+                         }
+                      }
+                   }}
+                   className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 border border-red-100"
+                >
+                   <Trash2 className="w-5 h-5" />
+                   ยกเลิกการจอง (Cancel Booking)
+                </button>
+             </div>
+          )}
         </div>
       </div>
     </div>

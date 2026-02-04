@@ -112,20 +112,21 @@ async function handleCheckoutAlert(
     return { success: false, error: 'Failed to create task' };
   }
 
-  // Get ALL housekeepers (not just online ones)
+  // Get ONLY ON-DUTY housekeepers
   const { data: housekeepers, error: hkError } = await supabase
     .from('staff_line_mapping')
     .select('*, users!inner(*)')
     .eq('status', 'active')
-    .eq('users.role', 'housekeeping'); // Correct role name
+    .eq('users.role', 'housekeeping')
+    .eq('users.status', 'on-duty'); // Only notify those currently working
 
   if (hkError) {
     console.error('Error fetching housekeepers:', hkError);
   }
 
   if (!housekeepers || housekeepers.length === 0) {
-    console.error('No housekeepers found to notify');
-    return { success: false, error: 'No housekeepers available' };
+    console.error('No on-duty housekeepers found to notify');
+    return { success: false, error: 'No on-duty housekeepers available' };
   }
 
   // Send to all housekeepers
@@ -177,28 +178,21 @@ async function handleRepairRequest(
   let targetTechnicians = technicians;
   
   if (techError || !technicians || technicians.length === 0) {
-    // Fallback: get all active technicians
-    const { data: allTech } = await supabase
-      .from('staff_line_mapping')
-      .select('*, users!inner(*)')
-      .eq('status', 'active')
-      .eq('users.role', 'repair');
-
-    if (!allTech || allTech.length === 0) {
-      // Also notify admins if no technicians
-      const { data: admins } = await supabase.rpc('get_admins_with_line');
-      if (admins && admins.length > 0) {
-        const adminLineIds = admins.map((a: any) => a.line_user_id);
-        await multicastMessage(
-          adminLineIds,
-          [FlexTemplates.repairRequest(roomNumber, description, priority, reportId, reporterName)],
-          config.channelAccessToken
-        );
-        return { success: true, sentTo: adminLineIds.length, target: 'admins' };
-      }
-      return { success: false, error: 'No technicians or admins available' };
+    // No online technicians - Notify admins instead
+    console.log('No online technicians found, falling back to admins');
+    
+    // Also notify admins if no technicians
+    const { data: admins } = await supabase.rpc('get_admins_with_line');
+    if (admins && admins.length > 0) {
+      const adminLineIds = admins.map((a: any) => a.line_user_id);
+      await multicastMessage(
+        adminLineIds,
+        [FlexTemplates.repairRequest(roomNumber, description, priority, reportId, reporterName)],
+        config.channelAccessToken
+      );
+      return { success: true, sentTo: adminLineIds.length, target: 'admins' };
     }
-    targetTechnicians = allTech;
+    return { success: false, error: 'No online technicians or admins available' };
   }
 
   const lineIds = targetTechnicians.map((t: any) => t.line_user_id);

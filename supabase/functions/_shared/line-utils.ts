@@ -39,6 +39,21 @@ export interface LineConfig {
   adminRichMenuId?: string;
 }
 
+// Helper: Format room name
+export const formatRoomName = (roomNumber: number | string): string => {
+  const num = typeof roomNumber === 'string' ? parseInt(roomNumber, 10) : roomNumber;
+  if (isNaN(num)) return String(roomNumber);
+
+  if (num >= 1 && num <= 10) {
+    return `RC${String(num).padStart(2, '0')}`;
+  } else if (num >= 11 && num <= 20) {
+    return `RB${String(num - 10).padStart(2, '0')}`;
+  } else if (num >= 21 && num <= 30) {
+    return `RA${String(num - 20).padStart(2, '0')}`;
+  }
+  return String(num).padStart(2, '0');
+};
+
 // Get Supabase client
 export function getSupabaseClient() {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -228,7 +243,7 @@ export const FlexTemplates = {
   // Cleaning task notification for housekeepers
   cleaningTask: (roomNumber: number, roomType: string, checkoutTime: string, taskId: string) => ({
     type: 'flex',
-    altText: `ห้อง ${roomNumber} ต้องการทำความสะอาด`,
+    altText: `ห้อง ${formatRoomName(roomNumber)} ต้องการทำความสะอาด`,
     contents: {
       type: 'bubble',
       header: {
@@ -255,7 +270,7 @@ export const FlexTemplates = {
             layout: 'horizontal',
             contents: [
               { type: 'text', text: 'ห้อง', size: 'sm', color: '#888888', flex: 2 },
-              { type: 'text', text: `${roomNumber}`, weight: 'bold', size: 'xl', flex: 3 },
+              { type: 'text', text: `${formatRoomName(roomNumber)}`, weight: 'bold', size: 'xl', flex: 3 },
             ],
           },
           {
@@ -302,7 +317,7 @@ export const FlexTemplates = {
   // Repair request notification for technicians
   repairRequest: (roomNumber: number, description: string, priority: string, reportId: string, reporterName: string) => ({
     type: 'flex',
-    altText: `แจ้งซ่อม ห้อง ${roomNumber}`,
+    altText: `แจ้งซ่อม ห้อง ${formatRoomName(roomNumber)}`,
     contents: {
       type: 'bubble',
       header: {
@@ -329,7 +344,7 @@ export const FlexTemplates = {
             layout: 'horizontal',
             contents: [
               { type: 'text', text: 'ห้อง', size: 'sm', color: '#888888', flex: 2 },
-              { type: 'text', text: `${roomNumber}`, weight: 'bold', size: 'xl', flex: 3 },
+              { type: 'text', text: `${formatRoomName(roomNumber)}`, weight: 'bold', size: 'xl', flex: 3 },
             ],
           },
           {
@@ -376,7 +391,7 @@ export const FlexTemplates = {
   // Clean complete notification for admin
   cleanComplete: (roomNumber: number, cleanerName: string, taskId: string) => ({
     type: 'flex',
-    altText: `ห้อง ${roomNumber} สะอาดแล้ว`,
+    altText: `ห้อง ${formatRoomName(roomNumber)} สะอาดแล้ว`,
     contents: {
       type: 'bubble',
       header: {
@@ -403,7 +418,7 @@ export const FlexTemplates = {
             layout: 'horizontal',
             contents: [
               { type: 'text', text: 'ห้อง', size: 'sm', color: '#888888', flex: 2 },
-              { type: 'text', text: `${roomNumber}`, weight: 'bold', size: 'xl', flex: 3 },
+              { type: 'text', text: `${formatRoomName(roomNumber)}`, weight: 'bold', size: 'xl', flex: 3 },
             ],
           },
           {
@@ -441,7 +456,7 @@ export const FlexTemplates = {
   // Repair complete notification for admin
   repairComplete: (roomNumber: number, description: string, technicianName: string, reportId: string) => ({
     type: 'flex',
-    altText: `ห้อง ${roomNumber} ซ่อมเสร็จ`,
+    altText: `ห้อง ${formatRoomName(roomNumber)} ซ่อมเสร็จ`,
     contents: {
       type: 'bubble',
       header: {
@@ -468,7 +483,7 @@ export const FlexTemplates = {
             layout: 'horizontal',
             contents: [
               { type: 'text', text: 'ห้อง', size: 'sm', color: '#888888', flex: 2 },
-              { type: 'text', text: `${roomNumber}`, weight: 'bold', size: 'xl', flex: 3 },
+              { type: 'text', text: `${formatRoomName(roomNumber)}`, weight: 'bold', size: 'xl', flex: 3 },
             ],
           },
           {

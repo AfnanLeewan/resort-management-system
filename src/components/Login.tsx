@@ -3,7 +3,7 @@ import { User } from '../types';
 import * as api from '../utils/api';
 import { seedDemoData, hasDemoData } from '../utils/seedData';
 import { LogIn, User as UserIcon, Lock, Loader2 } from 'lucide-react';
-import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
+import logo from "../assets/Royyan_logo.JPG";
 
 interface LoginProps {
   onLogin: (user: User) => void;

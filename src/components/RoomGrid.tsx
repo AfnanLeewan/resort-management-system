@@ -32,7 +32,9 @@ import {
   Banknote,
   ArrowLeft,
   Waves,
-  Loader2
+  Loader2,
+  FileText,
+  CheckCircle2
 } from 'lucide-react';
 import { formatCurrency, formatDate, getTodayDateString } from '../utils/dateHelpers';
 import { PRICING } from '../utils/pricing';
@@ -41,6 +43,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { CheckInModal } from './CheckInModal';
 import { CheckOutModal } from './CheckOutModal';
 import { MaintenanceReportModal } from './MaintenanceReportModal';
+import { BookingDetailsModal } from './BookingDetailsModal';
 import { format, addDays, isSameDay, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { cn } from './ui/utils';
@@ -55,6 +58,7 @@ interface RoomGridProps {
 export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]); // New state for payments
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   
@@ -69,17 +73,22 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [selectedBookingForCheckIn, setSelectedBookingForCheckIn] = useState<Booking | null>(null);
   const [selectedBookingForCheckOut, setSelectedBookingForCheckOut] = useState<Booking | null>(null);
+  const [existingPaymentForCheckOut, setExistingPaymentForCheckOut] = useState<Payment | null>(null);
   const [selectedRoomForMaintenance, setSelectedRoomForMaintenance] = useState<Room | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedBookingForDetails, setSelectedBookingForDetails] = useState<Booking | null>(null);
 
   // Load data
   const loadData = useCallback(async () => {
     try {
-      const [loadedRooms, loadedBookings] = await Promise.all([
+      const [loadedRooms, loadedBookings, loadedPayments] = await Promise.all([
         api.getRooms(),
         api.getBookings(),
+        api.getPayments(),
       ]);
       setRooms(loadedRooms);
       setBookings(loadedBookings);
+      setPayments(loadedPayments);
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
@@ -137,14 +146,17 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
     const booking = bookings.find(b => 
         b.roomIds.includes(room.id) && 
         b.status !== 'cancelled' &&
-        b.status !== 'checked-out' && // Fix: Ignore checked-out bookings
+        b.status !== 'checked-out' && 
         b.checkInDate <= dateStr && 
         b.checkOutDate > dateStr
     );
 
     if (booking) {
-        // If checked in, show as occupied (Green)
-        if (booking.status === 'checked-in') return 'occupied';
+        // Check if paid (Payment exists for this booking)
+        const isPaid = payments.some(p => p.bookingId === booking.id && p.total > 0);
+        
+        // If checked in or paid, show as occupied
+        if (booking.status === 'checked-in' || isPaid) return 'occupied';
         // If checking in on this date (and not checked in yet)
         if (booking.checkInDate === dateStr) return 'reserved';
         // If staying over (already checked in or reserved previous days)
@@ -178,7 +190,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
      return bookings.find(b => 
         b.roomIds.includes(roomId) && 
         b.status !== 'cancelled' &&
-        b.status !== 'checked-out' && // Fix: Don't show checked-out bookings as active
+        b.status !== 'checked-out' &&
         b.checkInDate <= dateStr && 
         b.checkOutDate > dateStr
     );
@@ -435,20 +447,43 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                                 <h2 className="text-4xl font-bold text-slate-800">{(singleSelectedRoom as any).label}</h2>
                                 {(() => {
                                     const effectiveStatus = getRoomStatusForDate(singleSelectedRoom, selectedDateStr);
+                                    const b = getBookingForRoomDate(singleSelectedRoom.id, selectedDateStr);
+                                    const isPaid = b && payments.some(p => p.bookingId === b.id);
+                                    
+                                    // Determine badge color and text
+                                    let badgeClass = '';
+                                    let badgeText = '';
+                                    
+                                    if (effectiveStatus === 'available') {
+                                      badgeClass = 'bg-green-100 text-green-700';
+                                      badgeText = 'ว่าง';
+                                    } else if (effectiveStatus === 'reserved') {
+                                      badgeClass = 'bg-blue-100 text-blue-700';
+                                      badgeText = 'จองเข้าพัก (Arrival)';
+                                    } else if (effectiveStatus === 'occupied') {
+                                      if (isPaid) {
+                                        badgeClass = 'bg-purple-600 text-white';
+                                        badgeText = 'ชำระเงินแล้ว (Paid)';
+                                      } else {
+                                        badgeClass = 'bg-green-600 text-white';
+                                        badgeText = 'เช็คอินแล้ว/ไม่ว่าง';
+                                      }
+                                    } else if (effectiveStatus === 'cleaning') {
+                                      badgeClass = 'bg-orange-100 text-orange-700';
+                                      badgeText = 'กำลังทำความสะอาด';
+                                    } else {
+                                      badgeClass = 'bg-orange-100 text-orange-700';
+                                      badgeText = 'ปิดปรับปรุง';
+                                    }
+                                    
                                     return (
-                                        <div className={`px-4 py-1.5 rounded-full text-sm font-bold ${
-                                        effectiveStatus === 'available' ? 'bg-green-100 text-green-700' :
-                                        effectiveStatus === 'reserved' ? 'bg-blue-100 text-blue-700' :
-                                        effectiveStatus === 'occupied' ? 'bg-green-600 text-white' : 'bg-orange-100 text-orange-700'
-                                        }`}>
-                                        {effectiveStatus === 'available' ? 'ว่าง' :
-                                        effectiveStatus === 'reserved' ? 'จองเข้าพัก (Arrival)' :
-                                        effectiveStatus === 'occupied' ? 'เช็คอินแล้ว/ไม่ว่าง' : 
-                                        effectiveStatus === 'cleaning' ? 'กำลังทำความสะอาด' : 'ปิดปรับปรุง'}
+                                        <div className={`px-4 py-1.5 rounded-full text-sm font-bold ${badgeClass}`}>
+                                        {badgeText}
                                         </div>
                                     );
                                 })()}
                               </div>
+
                               <div className="text-slate-500 text-lg flex items-center gap-2">
                                 {(singleSelectedRoom as any).displayType === 'double' ? <Users className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
                                 {(singleSelectedRoom as any).displayType === 'double' ? 'เตียงคู่ (Twin Beds)' : 'เตียงเดี่ยว (King Bed)'}
@@ -553,6 +588,7 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                                               <div className="flex gap-4">
                                                  {/* Check In Button for Arrivals */}
                                                  {isArrival && !isCheckedIn && (
+                                                    <>
                                                     <button 
                                                         onClick={() => {
                                                             setSelectedBookingForCheckIn(booking);
@@ -563,41 +599,73 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                                                         <LogIn className="w-5 h-5" />
                                                         เช็คอิน
                                                     </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setSelectedBookingForDetails(booking);
+                                                            setShowDetailsModal(true);
+                                                        }}
+                                                        className="px-4 py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold transition-all"
+                                                        title="รายละเอียด / ยกเลิก"
+                                                    >
+                                                        <FileText className="w-6 h-6" />
+                                                    </button>
+                                                    </>
                                                  )}
                                                  
-                                                 {(!isArrival || isCheckedIn) && (
-                                                     <div className="flex-1 flex gap-2">
-                                                         <button 
-                                                            onClick={() => {
-                                                                setSelectedBookingForCheckOut(booking);
-                                                                setShowCheckOutModal(true);
-                                                            }}
-                                                            className="flex-1 py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold transition-all shadow-lg shadow-slate-200"
-                                                         >
-                                                            ดูบิล / ชำระเงิน
-                                                         </button>
-                                                         <button
-                                                             onClick={() => {
-                                                                setSelectedBookingForCheckOut(booking);
-                                                                setShowCheckOutModal(true);
-                                                            }} 
-                                                             className="px-4 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold transition-all border border-slate-200"
-                                                             title="Download Receipt"
-                                                         >
-                                                             <Printer className="w-6 h-6" />
-                                                         </button>
-                                                     </div>
-                                                 )}
-
-                                                 {/* Allow checkout only if occupied/checked-in/stayover */}
-                                                 {(status === 'occupied' || isCheckedIn) && (
-                                                      <button 
-                                                         onClick={() => handleUpdateRoomStatus(singleSelectedRoom.id, 'cleaning')}
-                                                         className="flex-1 py-4 bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 rounded-xl font-bold transition-all"
-                                                      >
-                                                         เช็คเอาท์
-                                                      </button>
+                                                  {(!isArrival || isCheckedIn) && (
+                                                      <div className="flex-1 flex gap-2">
+                                                          {(() => {
+                                                              const existingPayment = payments.find(p => p.bookingId === booking?.id);
+                                                              const isPaid = !!existingPayment;
+                                                              
+                                                              return (
+                                                                  <button 
+                                                                    onClick={() => {
+                                                                        setSelectedBookingForCheckOut(booking);
+                                                                        setExistingPaymentForCheckOut(existingPayment || null);
+                                                                        setShowCheckOutModal(true);
+                                                                    }}
+                                                                    className={`flex-1 py-4 rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 ${
+                                                                      isPaid 
+                                                                        ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-200' 
+                                                                        : 'bg-slate-800 hover:bg-slate-900 text-white shadow-slate-200'
+                                                                    }`}
+                                                                    >
+                                                                    {isPaid ? (
+                                                                      <>
+                                                                        <FileText className="w-5 h-5" />
+                                                                        ดูบิล
+                                                                      </>
+                                                                    ) : (
+                                                                      'ดูบิล / ชำระเงิน'
+                                                                    )}
+                                                                    </button>
+                                                              );
+                                                          })()}
+                                                          <button
+                                                              onClick={() => {
+                                                                 const existingPayment = payments.find(p => p.bookingId === booking?.id);
+                                                                 setSelectedBookingForCheckOut(booking);
+                                                                 setExistingPaymentForCheckOut(existingPayment || null);
+                                                                 setShowCheckOutModal(true);
+                                                             }} 
+                                                              className="px-4 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold transition-all border border-slate-200"
+                                                              title="Download Receipt"
+                                                          >
+                                                              <Printer className="w-6 h-6" />
+                                                          </button>
+                                                      </div>
                                                   )}
+
+                                                  {/* Allow checkout only if occupied/checked-in/stayover */}
+                                                  {/* {(status === 'occupied' || isCheckedIn || payments.some(p => p.bookingId === booking?.id)) && (
+                                                       <button 
+                                                          onClick={() => handleUpdateRoomStatus(singleSelectedRoom.id, 'cleaning')}
+                                                          className="flex-1 py-4 bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 rounded-xl font-bold transition-all"
+                                                       >
+                                                          เช็คเอาท์ (Manual)
+                                                      </button>
+                                                  )} */}
                                               </div>
                                           )}
                                           {!isToday && (
@@ -785,10 +853,17 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
       {showCheckOutModal && selectedBookingForCheckOut && currentUser && (
           <CheckOutModal 
              booking={selectedBookingForCheckOut}
-             onClose={() => setShowCheckOutModal(false)}
+             onClose={() => {
+                setShowCheckOutModal(false);
+                setExistingPaymentForCheckOut(null);
+                setSelectedBookingForCheckOut(null);
+                loadData(); // Reload data to reflect any payment changes
+             }}
              currentUser={currentUser}
+             existingPayment={existingPaymentForCheckOut}
              onComplete={() => {
                 setShowCheckOutModal(false);
+                setExistingPaymentForCheckOut(null);
                 loadData();
                 setSelectedBookingForCheckOut(null);
              }}
@@ -799,17 +874,22 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
       {showMaintenanceModal && selectedRoomForMaintenance && currentUser && (
         <MaintenanceReportModal
           room={selectedRoomForMaintenance}
-          currentUser={currentUser}
           onClose={() => {
             setShowMaintenanceModal(false);
             setSelectedRoomForMaintenance(null);
           }}
-          onSuccess={() => {
-            setShowMaintenanceModal(false);
-            setSelectedRoomForMaintenance(null);
-            setSelectedRooms([]);
-            loadData();
-          }}
+          currentUser={currentUser}
+          onUpdate={loadData}
+        />
+      )}
+
+      {/* Booking Details Modal */}
+      {showDetailsModal && selectedBookingForDetails && currentUser && (
+        <BookingDetailsModal
+            booking={selectedBookingForDetails}
+            onClose={() => setShowDetailsModal(false)}
+            onUpdate={loadData}
+            currentUser={currentUser}
         />
       )}
     </div>
@@ -1015,8 +1095,8 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
       },
       checkInDate: formData.checkInDate,
       checkOutDate: formData.checkOutDate,
-      pricingTier: isGroup ? 'tour' : 'general', // Auto set tour tier for groups?
-      baseRate: isGroup ? PRICING['tour'] * rooms.length : PRICING['general'], // Simple calc
+      pricingTier: isGroup ? 'tour' : 'general', // Auto set tour tier for groups
+      baseRate: isGroup ? PRICING['tour'] : PRICING['general'], // Per-room rate
       deposit: formData.deposit ? parseFloat(formData.deposit) : 0,
       source: 'walk-in',
       status: 'reserved',
