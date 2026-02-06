@@ -76,7 +76,7 @@ export function Login({ onLogin }: LoginProps) {
               />
           </div>
           <h1 className="text-3xl font-bold text-slate-800 mb-2">ยินดีต้อนรับกลับ</h1>
-          <p className="text-slate-500">เข้าสู่ระบบเพื่อจัดการ Royyan Resort</p>
+          <p className="text-slate-500">เข้าสู่ระบบเพื่อจัดการ Royyan Resort |UAT| </p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
