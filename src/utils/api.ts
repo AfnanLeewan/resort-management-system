@@ -20,6 +20,7 @@ import {
 } from '../types';
 
 // Import localStorage functions as fallback
+import { formatRoomName } from './roomHelpers';
 import * as localStorage from './storage';
 
 // =====================================================
@@ -466,7 +467,7 @@ export async function addBooking(booking: Booking): Promise<string> {
         const num = parseInt(id.toString().replace(/\D/g, ''));
         return isNaN(num) ? id : num;
       }));
-    
+
     // Also try matching by id directly (in case roomIds are UUIDs)
     const { data: roomsByUuid } = await supabase
       .from('rooms')
@@ -600,21 +601,21 @@ export async function getPaymentByBookingId(bookingId: string): Promise<Payment 
   }
 
   if (!data) return null;
-  
+
   // Fetch charges
   const { data: chargesData } = await supabase
     .from('charges')
     .select('*')
     .eq('booking_id', bookingId);
 
-   const charges = (chargesData || []).map(c => ({
-        id: c.id,
-        bookingId: c.booking_id,
-        type: c.type as Charge['type'],
-        description: c.description,
-        amount: Number(c.amount),
-        authorizedBy: c.authorized_by || undefined,
-      }));
+  const charges = (chargesData || []).map(c => ({
+    id: c.id,
+    bookingId: c.booking_id,
+    type: c.type as Charge['type'],
+    description: c.description,
+    amount: Number(c.amount),
+    authorizedBy: c.authorized_by || undefined,
+  }));
 
   return mapPaymentFromDB(data, charges);
 }
@@ -628,7 +629,7 @@ export async function addPayment(payment: Payment): Promise<void> {
   // First, we need to get the Supabase booking UUID from our local booking ID
   // The booking_id in payment might be a local ID like "BK..." or a Supabase UUID
   let bookingUuid = payment.bookingId;
-  
+
   // Try to find the booking in Supabase if it looks like a local ID
   if (!payment.bookingId.includes('-')) {
     // It's not a UUID, try to find the booking by matching data
@@ -723,22 +724,27 @@ export async function deletePayment(paymentId: string): Promise<void> {
 // COUNTERS (Receipt/Invoice Numbers)
 // =====================================================
 
+// Receipt and Invoice counters
 export async function getNextReceiptNumber(): Promise<string> {
   if (isInDemoMode || !supabase) {
     return localStorage.getNextReceiptNumber();
   }
 
-  const { data, error } = await supabase.rpc('get_next_counter', { counter_id: 'receipt' });
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const dateStr = `${year}${month}${day}`;
+
+  // Use a date-specific counter ID for daily reset
+  const { data, error } = await supabase.rpc('get_next_counter', { counter_id: `receipt_${dateStr}` });
 
   if (error) {
     console.error('Error getting receipt number:', error);
     return localStorage.getNextReceiptNumber();
   }
 
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  return `REC-${year}${month}-${String(data).padStart(5, '0')}`;
+  return `REC-${dateStr}-${String(data).padStart(5, '0')}`;
 }
 
 export async function getNextInvoiceNumber(): Promise<string> {
@@ -746,17 +752,21 @@ export async function getNextInvoiceNumber(): Promise<string> {
     return localStorage.getNextInvoiceNumber();
   }
 
-  const { data, error } = await supabase.rpc('get_next_counter', { counter_id: 'invoice' });
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const dateStr = `${year}${month}${day}`;
+
+  // Use a date-specific counter ID for daily reset
+  const { data, error } = await supabase.rpc('get_next_counter', { counter_id: `invoice_${dateStr}` });
 
   if (error) {
     console.error('Error getting invoice number:', error);
     return localStorage.getNextInvoiceNumber();
   }
 
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  return `INV-${year}${month}-${String(data).padStart(5, '0')}`;
+  return `INV-${dateStr}-${String(data).padStart(5, '0')}`;
 }
 
 // =====================================================
@@ -801,7 +811,7 @@ export async function addMaintenanceReport(report: MaintenanceReport): Promise<M
     console.error('Error adding maintenance report:', error);
     throw error;
   }
-  
+
   // Return the actual data from DB, mapped to our type
   return mapMaintenanceFromDB(data);
 }
@@ -1093,7 +1103,8 @@ export async function exportToCSV(): Promise<string> {
   const bookings = await getBookings();
   const rooms = await getRooms();
 
-  let csv = 'Receipt Number,Invoice Number,Date,Guest Name,Room Numbers,Nights,Subtotal,VAT,Total,Payment Method\n';
+  // Updated Header with Guest Details
+  let csv = 'Receipt Number,Invoice Number,Date,Guest Name,National ID/Passport,Address,Telephone,Check-in Date,Check-out Date,Room Numbers,Nights,Subtotal,VAT,Total,Payment Method\n';
 
   payments.forEach((payment) => {
     const booking = bookings.find((b) => b.id === payment.bookingId);
@@ -1101,11 +1112,20 @@ export async function exportToCSV(): Promise<string> {
       const roomNumbers = booking.roomIds
         .map((id) => {
           const room = rooms.find((r) => r.id === id);
-          return room?.number || '';
+          return room ? formatRoomName(room.number) : '';
         })
         .join('+');
 
-      csv += `${payment.receiptNumber},${payment.invoiceNumber},${payment.paidAt},${booking.guest.name},${roomNumbers},`;
+      // Helper to handle potential commas in data
+      const escapeCsv = (str: string | undefined) => {
+        if (!str) return '';
+        return `"${str.replace(/"/g, '""')}"`; // Quote and escape quotes
+      };
+
+      csv += `${payment.receiptNumber},${payment.invoiceNumber},${payment.paidAt},`;
+      csv += `${escapeCsv(booking.guest.name)},${escapeCsv(booking.guest.idNumber)},${escapeCsv(booking.guest.address)},${escapeCsv(booking.guest.phone)},`;
+      csv += `${booking.checkInDate},${booking.checkOutDate},`;
+      csv += `${escapeCsv(roomNumbers)},`;
       csv += `${payment.charges.filter((c) => c.type === 'room').length},${payment.subtotal.toFixed(2)},`;
       csv += `${payment.vat.toFixed(2)},${payment.total.toFixed(2)},${payment.method}\n`;
     }

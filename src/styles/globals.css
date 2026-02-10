@@ -190,7 +190,7 @@ html {
     size: A4;
     margin: 0;
   }
-  
+
   body {
     background: white;
     width: 100%;
@@ -206,41 +206,66 @@ html {
     visibility: visible;
   }
 
-  /* Main Receipt Container - Centered on Page */
+  /* Main Receipt Container - Natural Flow */
   #receipt-content {
-    /* Position absolutely to cover the page */
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
+    position: relative !important;
     width: 100% !important;
-    min-height: 100% !important;
-    
-    /* Flexbox for centering */
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: center !important; /* Vertical Center */
-    align-items: center !important; /* Horizontal Center */
-    
-    /* Clean background */
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    padding: 5mm 10mm !important;
+    /* Reduced margins */
     background: white !important;
     z-index: 9999;
-    
-    /* Remove default padding from screen view and add print margins */
-    margin: 0 !important;
-    padding: 0 !important;
+    display: block !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: auto !important;
+    min-height: auto !important;
   }
 
-  /* constrain content width for readability */
-  #receipt-content > * {
-    width: 100% !important;
-    max-width: 180mm !important; /* Approx A4 width minus margins */
-    margin-left: auto !important;
-    margin-right: auto !important;
+  /* Compact spacing overrides */
+  #receipt-content .space-y-8> :not([hidden])~ :not([hidden]) {
+    margin-top: 0.5rem !important;
+    /* Drastically reduce vertical spacing */
+    margin-bottom: 0.5rem !important;
   }
-  
+
+  #receipt-content .p-8 {
+    padding: 1rem !important;
+    /* Reduce padding */
+  }
+
+  #receipt-content .p-6 {
+    padding: 0.5rem !important;
+  }
+
+  #receipt-content .pb-6 {
+    padding-bottom: 0.25rem !important;
+  }
+
+  #receipt-content .gap-4 {
+    gap: 0.5rem !important;
+  }
+
+  /* Compact table */
+  #receipt-content td,
+  #receipt-content th {
+    padding-top: 0.1rem !important;
+    padding-bottom: 0.1rem !important;
+  }
+
+  /* Smaller logo */
+  img {
+    height: 2.5rem !important;
+    /* 40px */
+    width: auto !important;
+    margin-bottom: 0 !important;
+  }
+
   /* Hide specific UI elements that might interfere */
-  button, nav, .close-btn {
+  button,
+  nav,
+  .close-btn {
     display: none !important;
   }
 
@@ -248,13 +273,66 @@ html {
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    box-shadow: none !important;
   }
-  
+
   /* Disable transforms to prevent layout issues */
   * {
     transform: none !important;
     animation: none !important;
     transition: none !important;
+  }
+
+  /* Typography Compaction */
+  h1,
+  .text-2xl {
+    font-size: 14pt !important;
+    line-height: 1.2 !important;
+    margin-bottom: 0 !important;
+  }
+
+  h2,
+  .text-xl {
+    font-size: 12pt !important;
+    line-height: 1.2 !important;
+    margin-bottom: 0 !important;
+  }
+
+  h3,
+  .text-lg {
+    font-size: 11pt !important;
+    line-height: 1.2 !important;
+    margin-bottom: 0.1rem !important;
+  }
+
+  /* Base text compaction */
+  p,
+  div,
+  span,
+  td,
+  th,
+  .text-sm,
+  .text-base {
+    font-size: 9pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .text-xs {
+    font-size: 7pt !important;
+    line-height: 1.1 !important;
+  }
+
+  /* Make sure table headers are visible */
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
   }
 }
 

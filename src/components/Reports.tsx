@@ -3,7 +3,7 @@ import { User, Booking, Payment, Room } from '../types';
 import * as api from '../utils/api';
 import { formatCurrency, formatDateTime } from '../utils/dateHelpers';
 import { formatRoomName } from '../utils/roomHelpers';
-import { Download, FileText, DollarSign, TrendingUp, Calendar, Printer, CreditCard, Banknote, Smartphone, Building, Info, Loader2, Trash2 } from 'lucide-react';
+import { Download, FileText, DollarSign, TrendingUp, Calendar, Printer, CreditCard, Banknote, Smartphone, Building, Info, Loader2, Trash2, CheckSquare, Square } from 'lucide-react';
 
 interface ReportsProps {
   currentUser: User;
@@ -17,6 +17,8 @@ export function Reports({ currentUser }: ReportsProps) {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeletingMulti, setIsDeletingMulti] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -50,7 +52,7 @@ export function Reports({ currentUser }: ReportsProps) {
     const totalVAT = monthPayments.reduce((sum, p) => sum + p.vat, 0);
     const totalSubtotal = monthPayments.reduce((sum, p) => sum + p.subtotal, 0);
     const totalTransactions = monthPayments.length;
-    
+
     // Payment method breakdown
     const cashPayments = monthPayments.filter(p => p.method === 'cash').reduce((sum, p) => sum + p.total, 0);
     const transferPayments = monthPayments.filter(p => p.method === 'transfer').reduce((sum, p) => sum + p.total, 0);
@@ -63,14 +65,14 @@ export function Reports({ currentUser }: ReportsProps) {
         return booking?.pricingTier === 'general';
       })
       .reduce((sum, p) => sum + p.total, 0);
-    
+
     const tourRevenue = monthPayments
       .filter(p => {
         const booking = bookings.find(b => b.id === p.bookingId);
         return booking?.pricingTier === 'tour';
       })
       .reduce((sum, p) => sum + p.total, 0);
-    
+
     const vipRevenue = monthPayments
       .filter(p => {
         const booking = bookings.find(b => b.id === p.bookingId);
@@ -128,18 +130,74 @@ export function Reports({ currentUser }: ReportsProps) {
     if (!confirm(`คุณต้องการลบรายการ ${receiptNumber} หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
       return;
     }
-    
+
     setDeleting(paymentId);
     try {
       await api.deletePayment(paymentId);
       // Refresh payments list
       const updatedPayments = await api.getPayments();
       setPayments(updatedPayments);
+
+      // Remove from selection if deleted
+      if (selectedIds.has(paymentId)) {
+        const newSelected = new Set(selectedIds);
+        newSelected.delete(paymentId);
+        setSelectedIds(newSelected);
+      }
     } catch (err) {
       console.error('Failed to delete payment:', err);
       alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment');
     } finally {
       setDeleting(null);
+    }
+  };
+
+  // Multi-select handlers
+  const handleToggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === monthPayments.length) {
+      setSelectedIds(new Set());
+    } else {
+      const allIds = new Set(monthPayments.map(p => p.id));
+      setSelectedIds(allIds);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+
+    if (!confirm(`คุณต้องการลบรายการที่เลือก ${selectedIds.size} รายการ หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
+      return;
+    }
+
+    setIsDeletingMulti(true);
+    try {
+      // Delete all selected payments in parallel
+      await Promise.all(Array.from(selectedIds).map(id => api.deletePayment(id)));
+
+      // Refresh payments list
+      const updatedPayments = await api.getPayments();
+      setPayments(updatedPayments);
+
+      // Clear selection
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error('Failed to delete selected payments:', err);
+      alert('❌ เกิดข้อผิดพลาดในการลบรายการบางรายการ / Some payments could not be deleted');
+      // Refresh anyway to show current state
+      const updatedPayments = await api.getPayments();
+      setPayments(updatedPayments);
+    } finally {
+      setIsDeletingMulti(false);
     }
   };
 
@@ -161,8 +219,8 @@ export function Reports({ currentUser }: ReportsProps) {
       <div className="flex items-center gap-4">
         {Icon && <div className="p-2 bg-slate-100 rounded-lg text-slate-500"><Icon className="w-5 h-5" /></div>}
         <div>
-            <div className="text-slate-800 font-bold">{label}</div>
-            {subValue && <div className="text-sm text-slate-400">{subValue}</div>}
+          <div className="text-slate-800 font-bold">{label}</div>
+          {subValue && <div className="text-sm text-slate-400">{subValue}</div>}
         </div>
       </div>
       <div className="text-right">
@@ -182,13 +240,13 @@ export function Reports({ currentUser }: ReportsProps) {
         </div>
         <div className="flex gap-3 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2 px-4 border-r border-slate-200 pr-4 mr-2">
-             <Calendar className="w-4 h-4 text-slate-400" />
-             <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="text-sm font-bold text-slate-700 outline-none bg-transparent cursor-pointer"
-             />
+            <Calendar className="w-4 h-4 text-slate-400" />
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="text-sm font-bold text-slate-700 outline-none bg-transparent cursor-pointer"
+            />
           </div>
           <button
             onClick={handleExportCSV}
@@ -252,21 +310,21 @@ export function Reports({ currentUser }: ReportsProps) {
             ช่องทางการชำระเงิน
           </h3>
           <div className="space-y-2">
-            <BreakdownItem 
+            <BreakdownItem
               icon={Banknote}
               label="เงินสด"
               subValue="Cash Payment"
               value={formatCurrency(stats.cashPayments)}
               percentage={stats.totalRevenue > 0 ? ((stats.cashPayments / stats.totalRevenue) * 100).toFixed(1) : '0'}
             />
-            <BreakdownItem 
+            <BreakdownItem
               icon={Building}
               label="โอนเงิน"
               subValue="Bank Transfer"
               value={formatCurrency(stats.transferPayments)}
               percentage={stats.totalRevenue > 0 ? ((stats.transferPayments / stats.totalRevenue) * 100).toFixed(1) : '0'}
             />
-            <BreakdownItem 
+            <BreakdownItem
               icon={Smartphone}
               label="สแกน QR"
               subValue="QR Code Payment"
@@ -283,19 +341,19 @@ export function Reports({ currentUser }: ReportsProps) {
             ประเภทลูกค้า
           </h3>
           <div className="space-y-2">
-            <BreakdownItem 
+            <BreakdownItem
               label="ลูกค้าทั่วไป (฿890)"
               subValue="General Customer"
               value={formatCurrency(stats.generalRevenue)}
               percentage={stats.totalRevenue > 0 ? ((stats.generalRevenue / stats.totalRevenue) * 100).toFixed(1) : '0'}
             />
-            <BreakdownItem 
+            <BreakdownItem
               label="ทัวร์/แนะนำ (฿840)"
               subValue="Tour / Referral"
               value={formatCurrency(stats.tourRevenue)}
               percentage={stats.totalRevenue > 0 ? ((stats.tourRevenue / stats.totalRevenue) * 100).toFixed(1) : '0'}
             />
-            <BreakdownItem 
+            <BreakdownItem
               label="VIP / ผู้ถือหุ้น (฿400)"
               subValue="Shareholder / VIP"
               value={formatCurrency(stats.vipRevenue)}
@@ -307,16 +365,39 @@ export function Reports({ currentUser }: ReportsProps) {
 
       {/* Transaction Table */}
       <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="px-8 py-6 border-b border-slate-200 bg-slate-50/50">
+        <div className="px-8 py-6 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-800">รายการล่าสุด (Recent Transactions)</h3>
+
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              disabled={isDeletingMulti}
+              className="flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-colors font-bold text-sm"
+            >
+              {isDeletingMulti ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              <span>ลบที่เลือก ({selectedIds.size})</span>
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-white border-b border-slate-200">
               <tr>
+                <th className="px-6 py-4 w-[5%] text-xs font-bold text-slate-400 uppercase tracking-wider text-center">
+                  <button
+                    onClick={handleSelectAll}
+                    className="p-1 hover:bg-slate-100 rounded transition-colors"
+                  >
+                    {monthPayments.length > 0 && selectedIds.size === monthPayments.length ? (
+                      <CheckSquare className="w-5 h-5 text-indigo-600" />
+                    ) : (
+                      <Square className="w-5 h-5 text-slate-300" />
+                    )}
+                  </button>
+                </th>
                 <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider">วันที่</th>
                 <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider">ใบเสร็จ</th>
-                <th className="px-6 py-4 w-[18%] text-xs font-bold text-slate-400 uppercase tracking-wider">ลูกค้า</th>
+                <th className="px-6 py-4 w-[15%] text-xs font-bold text-slate-400 uppercase tracking-wider">ลูกค้า</th>
                 <th className="px-6 py-4 w-[10%] text-xs font-bold text-slate-400 uppercase tracking-wider">ห้อง</th>
                 <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider text-right">ยอดรวม</th>
                 <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider text-right">วิธีชำระ</th>
@@ -328,9 +409,22 @@ export function Reports({ currentUser }: ReportsProps) {
                 const booking = bookings.find(b => b.id === payment.bookingId);
                 const bookingRooms = booking ? rooms.filter(r => booking.roomIds.includes(r.id)) : [];
                 const roomNumbers = bookingRooms.map(r => formatRoomName(r.number)).join(', ');
-                
+                const isSelected = selectedIds.has(payment.id);
+
                 return (
-                  <tr key={payment.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={payment.id} className={`transition-colors ${isSelected ? 'bg-indigo-50/30 hover:bg-indigo-50/50' : 'hover:bg-slate-50'}`}>
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={() => handleToggleSelect(payment.id)}
+                        className="p-1 hover:bg-slate-200/50 rounded transition-colors"
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-5 h-5 text-indigo-600" />
+                        ) : (
+                          <Square className="w-5 h-5 text-slate-300" />
+                        )}
+                      </button>
+                    </td>
                     <td className="px-6 py-4 text-slate-600 font-medium">
                       {formatDateTime(payment.paidAt)}
                     </td>
@@ -343,33 +437,32 @@ export function Reports({ currentUser }: ReportsProps) {
                     <td className="px-6 py-4 text-slate-600">{roomNumbers}</td>
                     <td className="px-6 py-4 text-right font-bold text-slate-800">{formatCurrency(payment.total)}</td>
                     <td className="px-6 py-4 text-right">
-                       <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                          payment.method === 'cash' ? 'bg-orange-100 text-orange-700' :
+                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${payment.method === 'cash' ? 'bg-orange-100 text-orange-700' :
                           payment.method === 'transfer' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                       }`}>
-                          {payment.method}
-                       </span>
+                        }`}>
+                        {payment.method}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                       <button
-                          onClick={() => handleDeletePayment(payment.id, payment.receiptNumber)}
-                          disabled={deleting === payment.id}
-                          className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
-                          title="ลบรายการ"
-                       >
-                          {deleting === payment.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                       </button>
+                      <button
+                        onClick={() => handleDeletePayment(payment.id, payment.receiptNumber)}
+                        disabled={deleting === payment.id || isDeletingMulti}
+                        className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                        title="ลบรายการ"
+                      >
+                        {deleting === payment.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
                     </td>
                   </tr>
                 );
               })}
               {monthPayments.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-24 text-center text-slate-400">
+                  <td colSpan={8} className="px-6 py-24 text-center text-slate-400">
                     <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
                     <p className="font-medium">ไม่พบรายการในเดือนนี้</p>
                   </td>
@@ -379,7 +472,7 @@ export function Reports({ currentUser }: ReportsProps) {
           </table>
         </div>
       </div>
-      
+
       {/* Footer Notes */}
       <div className="p-6 rounded-3xl bg-slate-100 text-slate-500 text-sm flex items-start gap-3">
         <Info className="w-5 h-5 shrink-0 mt-0.5" />
@@ -390,12 +483,12 @@ export function Reports({ currentUser }: ReportsProps) {
 }
 
 function Users({ className }: { className?: string }) {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-            <circle cx="9" cy="7" r="4"></circle>
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-        </svg>
-    )
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+      <circle cx="9" cy="7" r="4"></circle>
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+    </svg>
+  )
 }
