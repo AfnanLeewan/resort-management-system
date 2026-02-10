@@ -1,11 +1,11 @@
 import { ReactNode, useState } from 'react';
 import { User } from '../types';
-import { 
-  LayoutDashboard, 
-  DoorOpen, 
-  Bed, 
-  Wrench, 
-  BarChart3, 
+import {
+  LayoutDashboard,
+  DoorOpen,
+  Bed,
+  Wrench,
+  BarChart3,
   LogOut,
   Users,
   HelpCircle,
@@ -31,14 +31,14 @@ interface LayoutProps {
 export function Layout({ children, currentUser, currentView, onViewChange, onLogout }: LayoutProps) {
   const [showGuide, setShowGuide] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  
+
   const menuItems = [
     { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard, roles: ['front-desk', 'management', 'board'] },
     { id: 'frontdesk', label: 'เคาน์เตอร์', icon: DoorOpen, roles: ['front-desk', 'management'] },
     { id: 'rooms', label: 'สถานะห้องพัก', icon: Bed, roles: ['front-desk', 'housekeeping', 'management', 'repair'] },
     { id: 'room-management', label: 'จัดการห้องพัก', icon: Settings, roles: ['management'] },
     { id: 'staff', label: 'พนักงาน', icon: Users, roles: ['management', 'board', 'front-desk'] },
-    { id: 'housekeeping', label: 'แม่บ้าน', icon: Wrench, roles: ['housekeeping', 'management'] },
+    { id: 'housekeeping', label: 'แม่บ้าน', icon: Wrench, roles: ['housekeeping', 'management', 'front-desk'] },
     { id: 'maintenance', label: 'รายการแจ้งซ่อม', icon: Wrench, roles: ['management', 'front-desk', 'housekeeping', 'repair'] },
     { id: 'line-settings', label: 'ตั้งค่า LINE', icon: MessageSquare, roles: ['management'] },
     { id: 'inventory', label: 'คลังพัสดุ', icon: Package, roles: ['management', 'housekeeping', 'front-desk'] },
@@ -59,9 +59,9 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
         <div className="h-20 flex items-center px-6 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white border border-slate-100 rounded-xl flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-1">
-              <img 
+              <img
                 src={logo}
-                alt="Logo" 
+                alt="Logo"
                 className="w-full h-full object-contain"
               />
             </div>
@@ -85,8 +85,8 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
                 onClick={() => onViewChange(item.id)}
                 className={`
                   w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative
-                  ${isActive 
-                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-200' 
+                  ${isActive
+                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-200'
                     : 'text-slate-500 hover:bg-orange-50 hover:text-orange-600'
                   }
                 `}
@@ -128,23 +128,23 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
 
       {/* Main Content Wrapper */}
       <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-20'}`}>
-        
+
         {/* Top Header */}
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 sticky top-0 z-40 px-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors"
             >
               <Menu className="w-6 h-6" />
             </button>
-            
+
             {/* Search Bar */}
             <div className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-full w-96 focus-within:ring-2 focus-within:ring-orange-100 focus-within:border-orange-300 transition-all">
               <Search className="w-4 h-4 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="ค้นหาห้องพัก, ผู้เข้าพัก, หรือการจอง..." 
+              <input
+                type="text"
+                placeholder="ค้นหาห้องพัก, ผู้เข้าพัก, หรือการจอง..."
                 className="bg-transparent border-none outline-none text-sm w-full placeholder:text-slate-400"
               />
             </div>
@@ -152,7 +152,7 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
 
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
-               <button className="p-2 relative text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-full transition-colors">
+              <button className="p-2 relative text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-full transition-colors">
                 <MessageSquare className="w-5 h-5" />
                 <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
               </button>
@@ -161,7 +161,7 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
                 <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-white"></span>
               </button>
             </div>
-            
+
             <button
               onClick={() => setShowGuide(true)}
               className="flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-600 rounded-full hover:bg-orange-100 transition-colors text-sm font-medium"
@@ -183,7 +183,7 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
               <span className="text-orange-500 font-medium capitalize">{menuItems.find(m => m.id === currentView)?.label || currentView}</span>
             </div>
           </div>
-          
+
           {children}
         </main>
       </div>

@@ -44,14 +44,14 @@ export function ReceiptModal({ booking, payment, roomNumbers, onClose }: Receipt
           {/* Header */}
           <div className="text-center pb-6 border-b border-slate-100 space-y-1">
             <div className="flex justify-center mb-4">
-               <img src={logo} alt="Royyan Resort Logo" className="h-24 w-auto object-contain" />
+              <img src={logo} alt="Royyan Resort Logo" className="h-24 w-auto object-contain" />
             </div>
             <h1 className="text-2xl font-bold text-slate-900">รอยยาน รีสอร์ท</h1>
             <h2 className="text-xl font-bold text-slate-900 mb-2">ROYYAN RESORT</h2>
-            
+
             <div className="text-sm font-bold text-slate-800">บริษัท รอยยาน คอร์ปอเรชั่น (ไทยแลนด์) จำกัด</div>
             <div className="text-sm font-bold text-slate-800 mb-2">ROYYAN CORPORATION (THAILAND) Co., LTD.</div>
-            
+
             <div className="text-xs text-slate-600">เลขที่ 478 หมู่ที่ 2 ถนนยนตรการกำธร ตำบลฉลุง อำเภอเมือง จังหวัดสตูล 91140</div>
             <div className="text-xs text-slate-600">Address: No. 478 Moo 2 Yontrakankumton Rd., Chalung, Muang, Satun. 91140</div>
             <div className="text-xs text-slate-600 font-medium mt-1">
@@ -61,31 +61,31 @@ export function ReceiptModal({ booking, payment, roomNumbers, onClose }: Receipt
 
           {/* Receipt Numbers Row */}
           <div className="py-2 px-2">
-              <div className="flex justify-between items-end mb-2">
-                  <div className="text-slate-800 font-bold text-lg w-1/3">เล่มที่ 001</div>
-                  <div className="text-center w-1/3">
-                      <span className="text-2xl font-bold text-slate-900 border-b-2 border-slate-900 pb-1">ใบเสร็จรับเงิน</span>
-                  </div>
-                  <div className="text-right w-1/3 space-y-1">
-                      <div className="text-slate-800 font-bold text-lg font-mono">No. {payment.receiptNumber}</div>
-                      <div className="text-slate-600 text-sm font-mono">Tax Inv. {payment.invoiceNumber}</div>
-                  </div>
+            <div className="flex justify-between items-end mb-2">
+              <div className="text-slate-800 font-bold text-lg w-1/3">เล่มที่ 001</div>
+              <div className="text-center w-1/3">
+                <span className="text-2xl font-bold text-slate-900 border-b-2 border-slate-900 pb-1">ใบกำกับภาษีและใบเสร็จรับเงิน</span>
               </div>
-              <div className="flex justify-end">
-                  <div className="text-right text-slate-800">
-                      <span className="font-bold mr-2">วันที่ Date :</span>
-                      <span className="border-b border-slate-400 border-dotted px-2 inline-block min-w-[150px] text-center font-medium">
-                          {formatDateTime(payment.paidAt)}
-                      </span>
-                  </div>
+              <div className="text-right w-1/3 space-y-1">
+                <div className="text-slate-800 font-bold text-lg font-mono">No. {payment.receiptNumber}</div>
+                <div className="text-slate-600 text-sm font-mono">Tax Inv. {payment.invoiceNumber}</div>
               </div>
+            </div>
+            <div className="flex justify-end">
+              <div className="text-right text-slate-800">
+                <span className="font-bold mr-2">วันที่ Date :</span>
+                <span className="border-b border-slate-400 border-dotted px-2 inline-block min-w-[150px] text-center font-medium">
+                  {formatDateTime(payment.paidAt)}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Guest Info */}
           <div className="border border-slate-200 rounded-2xl p-6">
             <h3 className="text-slate-800 font-bold mb-4 flex items-center gap-2">
-               <UserIcon className="w-5 h-5 text-orange-500" />
-               ข้อมูลผู้เข้าพัก
+              <UserIcon className="w-5 h-5 text-orange-500" />
+              ข้อมูลผู้เข้าพัก
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -148,17 +148,36 @@ export function ReceiptModal({ booking, payment, roomNumbers, onClose }: Receipt
           {/* Payment Method */}
           <div className="bg-orange-50 border border-orange-100 rounded-2xl p-6 flex items-center justify-between">
             <div>
-                <div className="text-orange-800 text-sm font-bold">วิธีการชำระเงิน</div>
-                <div className="text-orange-600 text-sm">Payment Method</div>
+              <div className="text-orange-800 text-sm font-bold">วิธีการชำระเงิน</div>
+              <div className="text-orange-600 text-sm">Payment Method</div>
             </div>
             <div className="text-orange-900 font-bold text-lg flex items-center gap-2">
-              {payment.method === 'cash' && <><Banknote className="w-5 h-5"/> เงินสด / Cash</>}
-              {payment.method === 'transfer' && <><Building className="w-5 h-5"/> โอนเงิน / Bank Transfer</>}
-              {payment.method === 'qr' && <><Smartphone className="w-5 h-5"/> QR Code</>}
+              {payment.method === 'cash' && <><Banknote className="w-5 h-5" /> เงินสด / Cash</>}
+              {payment.method === 'transfer' && <><Building className="w-5 h-5" /> โอนเงิน / Bank Transfer</>}
+              {payment.method === 'qr' && <><Smartphone className="w-5 h-5" /> QR Code</>}
             </div>
           </div>
 
-          <div className="text-center text-slate-400 text-xs pt-6 border-t border-slate-100">
+          {/* Signatures */}
+          <div className="pt-4 pb-2 break-inside-avoid">
+            <div className="flex justify-between items-end gap-12">
+              {/* Receiver (Left) */}
+              <div className="flex-1 text-center">
+                <div className="border-b border-slate-400 border-dotted h-8 mb-2"></div>
+                <div className="text-slate-800 font-bold text-sm">ผู้รับเงิน / Receiver</div>
+                <div className="text-slate-400 text-xs mt-1">วันที่ ______/______/______</div>
+              </div>
+
+              {/* Payer (Right) */}
+              <div className="flex-1 text-center">
+                <div className="border-b border-slate-400 border-dotted h-8 mb-2"></div>
+                <div className="text-slate-800 font-bold text-sm">ผู้จ่ายเงิน / Payer</div>
+                <div className="text-slate-400 text-xs mt-1">วันที่ ______/______/______</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-center text-slate-400 text-xs pt-4 border-t border-slate-100">
             <p>ขอบคุณที่ใช้บริการ Royyan Resort</p>
           </div>
         </div>

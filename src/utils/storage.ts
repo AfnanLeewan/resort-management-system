@@ -316,10 +316,10 @@ export function addAttendanceRecord(record: AttendanceRecord): void {
 export function toggleUserAttendance(userId: string, type: 'check-in' | 'check-out'): void {
   const users = getUsers();
   const user = users.find(u => u.id === userId);
-  
+
   if (user) {
     const timestamp = new Date().toISOString();
-    
+
     // Update user status
     user.status = type === 'check-in' ? 'on-duty' : 'off-duty';
     if (type === 'check-in') {
@@ -329,7 +329,7 @@ export function toggleUserAttendance(userId: string, type: 'check-in' | 'check-o
       user.lastCheckOut = timestamp;
       user.isOnline = false; // Auto set offline when checking out (optional, but makes sense)
     }
-    
+
     saveUsers(users);
 
     // Add record
@@ -343,24 +343,24 @@ export function toggleUserAttendance(userId: string, type: 'check-in' | 'check-o
 }
 
 export function recordLeave(userId: string, date: string, reason: string): void {
-    const users = getUsers();
-    const user = users.find(u => u.id === userId);
-    
-    if (user) {
-        // We might want to update status if the leave is TODAY, but for now just record it
-        // user.status = 'on-leave'; 
-        // saveUsers(users);
+  const users = getUsers();
+  const user = users.find(u => u.id === userId);
 
-        addAttendanceRecord({
-            id: `ATT-LEAVE-${Date.now()}`,
-            userId,
-            type: 'leave',
-            timestamp: new Date().toISOString(), // Record creation time
-            leaveDate: date, // The actual leave date
-            leaveReason: reason,
-            note: reason
-        });
-    }
+  if (user) {
+    // We might want to update status if the leave is TODAY, but for now just record it
+    // user.status = 'on-leave'; 
+    // saveUsers(users);
+
+    addAttendanceRecord({
+      id: `ATT-LEAVE-${Date.now()}`,
+      userId,
+      type: 'leave',
+      timestamp: new Date().toISOString(), // Record creation time
+      leaveDate: date, // The actual leave date
+      leaveReason: reason,
+      note: reason
+    });
+  }
 }
 
 export function toggleUserOnlineStatus(userId: string): void {
@@ -374,25 +374,31 @@ export function toggleUserOnlineStatus(userId: string): void {
 
 // Receipt and Invoice counters
 export function getNextReceiptNumber(): string {
-  const counter =
-    loadFromStorage<number>(STORAGE_KEYS.RECEIPT_COUNTER, 0) +
-    1;
-  saveToStorage(STORAGE_KEYS.RECEIPT_COUNTER, counter);
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `REC-${year}${month}-${String(counter).padStart(5, "0")}`;
+  const day = String(date.getDate()).padStart(2, "0");
+  const dateStr = `${year}${month}${day}`;
+
+  const key = `${STORAGE_KEYS.RECEIPT_COUNTER}_${dateStr}`;
+  const counter = loadFromStorage<number>(key, 0) + 1;
+  saveToStorage(key, counter);
+
+  return `REC-${dateStr}-${String(counter).padStart(5, "0")}`;
 }
 
 export function getNextInvoiceNumber(): string {
-  const counter =
-    loadFromStorage<number>(STORAGE_KEYS.INVOICE_COUNTER, 0) +
-    1;
-  saveToStorage(STORAGE_KEYS.INVOICE_COUNTER, counter);
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `INV-${year}${month}-${String(counter).padStart(5, "0")}`;
+  const day = String(date.getDate()).padStart(2, "0");
+  const dateStr = `${year}${month}${day}`;
+
+  const key = `${STORAGE_KEYS.INVOICE_COUNTER}_${dateStr}`;
+  const counter = loadFromStorage<number>(key, 0) + 1;
+  saveToStorage(key, counter);
+
+  return `INV-${dateStr}-${String(counter).padStart(5, "0")}`;
 }
 
 // Export data for tax reporting
