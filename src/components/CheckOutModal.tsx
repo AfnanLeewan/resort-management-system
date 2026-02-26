@@ -168,7 +168,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
       });
     });
     // Discount
-    if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management')) {
+    if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management' || currentUser.role === 'front-desk')) {
       chargeList.push({
         id: `charge-discount`,
         bookingId: booking.id,
@@ -187,7 +187,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
   // Extract VAT and Base Price from the Total
   const vat = useMemo(() => extractVAT(total), [total]);
   const subtotal = useMemo(() => extractBasePrice(total), [total]);
-  const canApplyDiscount = currentUser.role === 'board' || currentUser.role === 'management';
+  const canApplyDiscount = currentUser.role === 'board' || currentUser.role === 'management' || currentUser.role === 'front-desk';
   const handlePayment = async () => {
     // Removed blocking confirm dialog for better UX
     setProcessing(true);

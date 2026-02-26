@@ -126,7 +126,7 @@ export function Reports({ currentUser }: ReportsProps) {
     window.print();
   };
 
-  const handleDeletePayment = async (paymentId: string, receiptNumber: string) => {
+  const handleDeletePayment = async (paymentId: string, bookingId: string, receiptNumber: string) => {
     if (!confirm(`คุณต้องการลบรายการ ${receiptNumber} หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
       return;
     }
@@ -134,8 +134,13 @@ export function Reports({ currentUser }: ReportsProps) {
     setDeleting(paymentId);
     try {
       await api.deletePayment(paymentId);
+      await api.deleteBooking(bookingId);
       // Refresh payments list
-      const updatedPayments = await api.getPayments();
+      const [updatedBookings, updatedPayments] = await Promise.all([
+        api.getBookings(),
+        api.getPayments(),
+      ]);
+      setBookings(updatedBookings);
       setPayments(updatedPayments);
 
       // Remove from selection if deleted
@@ -145,8 +150,8 @@ export function Reports({ currentUser }: ReportsProps) {
         setSelectedIds(newSelected);
       }
     } catch (err) {
-      console.error('Failed to delete payment:', err);
-      alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment');
+      console.error('Failed to delete payment/booking:', err);
+      alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment or booking');
     } finally {
       setDeleting(null);
     }
