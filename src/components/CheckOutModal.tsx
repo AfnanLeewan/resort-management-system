@@ -293,7 +293,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
         <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 border border-slate-100">
           <div className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-100 px-8 py-6 flex items-center justify-between z-10">
             <div>
-              <h2 className="text-2xl font-bold text-slate-800">ใบเสร็จรับเงิน</h2>
+              <h2 className="text-2xl font-bold text-slate-800">ใบกำกับภาษีและใบเสร็จรับเงิน</h2>
               <p className="text-slate-500 text-sm">Receipt & Tax Invoice</p>
             </div>
             <div className="flex gap-3">
@@ -347,7 +347,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
               <div className="flex justify-between items-end mb-2">
                 <div className="text-slate-800 font-bold text-lg w-1/3">เล่มที่ 001</div>
                 <div className="text-center w-1/3">
-                  <span className="text-2xl font-bold text-slate-900 border-b-2 border-slate-900 pb-1">ใบเสร็จรับเงิน</span>
+                  <span className="text-xl font-bold text-slate-900 border-b-2 border-slate-900 pb-1">ใบกำกับภาษีและใบเสร็จรับเงิน</span>
                 </div>
                 <div className="text-right w-1/3 space-y-1">
                   <div className="text-slate-800 font-bold text-lg font-mono">No. {receipt.receiptNumber}</div>
@@ -437,6 +437,25 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
                 {receipt.method === 'qr' && <><Smartphone className="w-5 h-5" /> QR Code</>}
               </div>
             </div>
+            {/* Signatures */}
+            <div className="pt-4 pb-2 break-inside-avoid">
+              <div className="flex justify-between items-end gap-12">
+                {/* Receiver (Left) */}
+                <div className="flex-1 text-center">
+                  <div className="border-b border-slate-400 border-dotted h-8 mb-2"></div>
+                  <div className="text-slate-800 font-bold text-sm">ผู้รับเงิน / Receiver</div>
+                  <div className="text-slate-400 text-xs mt-1">วันที่ ______/______/______</div>
+                </div>
+
+                {/* Payer (Right) */}
+                <div className="flex-1 text-center">
+                  <div className="border-b border-slate-400 border-dotted h-8 mb-2"></div>
+                  <div className="text-slate-800 font-bold text-sm">ผู้จ่ายเงิน / Payer</div>
+                  <div className="text-slate-400 text-xs mt-1">วันที่ ______/______/______</div>
+                </div>
+              </div>
+            </div>
+
             <div className="text-center text-slate-400 text-xs pt-6 border-t border-slate-100">
               <p>ขอบคุณที่ใช้บริการ Royyan Resort</p>
             </div>
@@ -687,8 +706,8 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
               <button
                 onClick={() => setPaymentMethod('cash')}
                 className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${paymentMethod === 'cash'
-                    ? 'border-orange-500 bg-orange-50 text-orange-700'
-                    : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200 hover:bg-orange-50/50'
+                  ? 'border-orange-500 bg-orange-50 text-orange-700'
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200 hover:bg-orange-50/50'
                   }`}
               >
                 <Banknote className={`w-8 h-8 ${paymentMethod === 'cash' ? 'text-orange-600' : 'text-slate-400'}`} />
@@ -697,8 +716,8 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
               <button
                 onClick={() => setPaymentMethod('transfer')}
                 className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${paymentMethod === 'transfer'
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-slate-200 bg-white text-slate-500 hover:border-blue-200 hover:bg-blue-50/50'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-blue-200 hover:bg-blue-50/50'
                   }`}
               >
                 <Building className={`w-8 h-8 ${paymentMethod === 'transfer' ? 'text-blue-600' : 'text-slate-400'}`} />
@@ -707,8 +726,8 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
               <button
                 onClick={() => setPaymentMethod('qr')}
                 className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${paymentMethod === 'qr'
-                    ? 'border-purple-500 bg-purple-50 text-purple-700'
-                    : 'border-slate-200 bg-white text-slate-500 hover:border-purple-200 hover:bg-purple-50/50'
+                  ? 'border-purple-500 bg-purple-50 text-purple-700'
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-purple-200 hover:bg-purple-50/50'
                   }`}
               >
                 <Smartphone className={`w-8 h-8 ${paymentMethod === 'qr' ? 'text-purple-600' : 'text-slate-400'}`} />

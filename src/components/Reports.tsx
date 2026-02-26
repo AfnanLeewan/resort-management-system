@@ -3,7 +3,7 @@ import { User, Booking, Payment, Room } from '../types';
 import * as api from '../utils/api';
 import { formatCurrency, formatDateTime } from '../utils/dateHelpers';
 import { formatRoomName } from '../utils/roomHelpers';
-import { Download, FileText, DollarSign, TrendingUp, Calendar, Printer, CreditCard, Banknote, Smartphone, Building, Info, Loader2, Trash2 } from 'lucide-react';
+import { Download, FileText, DollarSign, TrendingUp, Calendar, Printer, CreditCard, Banknote, Smartphone, Building, Info, Loader2, Trash2, CheckSquare, Square } from 'lucide-react';
 
 interface ReportsProps {
   currentUser: User;
@@ -17,6 +17,8 @@ export function Reports({ currentUser }: ReportsProps) {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeletingMulti, setIsDeletingMulti] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -140,11 +142,67 @@ export function Reports({ currentUser }: ReportsProps) {
       ]);
       setBookings(updatedBookings);
       setPayments(updatedPayments);
+
+      // Remove from selection if deleted
+      if (selectedIds.has(paymentId)) {
+        const newSelected = new Set(selectedIds);
+        newSelected.delete(paymentId);
+        setSelectedIds(newSelected);
+      }
     } catch (err) {
       console.error('Failed to delete payment/booking:', err);
       alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment or booking');
     } finally {
       setDeleting(null);
+    }
+  };
+
+  // Multi-select handlers
+  const handleToggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === monthPayments.length) {
+      setSelectedIds(new Set());
+    } else {
+      const allIds = new Set(monthPayments.map(p => p.id));
+      setSelectedIds(allIds);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+
+    if (!confirm(`คุณต้องการลบรายการที่เลือก ${selectedIds.size} รายการ หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
+      return;
+    }
+
+    setIsDeletingMulti(true);
+    try {
+      // Delete all selected payments in parallel
+      await Promise.all(Array.from(selectedIds).map(id => api.deletePayment(id)));
+
+      // Refresh payments list
+      const updatedPayments = await api.getPayments();
+      setPayments(updatedPayments);
+
+      // Clear selection
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error('Failed to delete selected payments:', err);
+      alert('❌ เกิดข้อผิดพลาดในการลบรายการบางรายการ / Some payments could not be deleted');
+      // Refresh anyway to show current state
+      const updatedPayments = await api.getPayments();
+      setPayments(updatedPayments);
+    } finally {
+      setIsDeletingMulti(false);
     }
   };
 
@@ -312,16 +370,39 @@ export function Reports({ currentUser }: ReportsProps) {
 
       {/* Transaction Table */}
       <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="px-8 py-6 border-b border-slate-200 bg-slate-50/50">
+        <div className="px-8 py-6 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-800">รายการล่าสุด (Recent Transactions)</h3>
+
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              disabled={isDeletingMulti}
+              className="flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-colors font-bold text-sm"
+            >
+              {isDeletingMulti ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              <span>ลบที่เลือก ({selectedIds.size})</span>
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-white border-b border-slate-200">
               <tr>
+                <th className="px-6 py-4 w-[5%] text-xs font-bold text-slate-400 uppercase tracking-wider text-center">
+                  <button
+                    onClick={handleSelectAll}
+                    className="p-1 hover:bg-slate-100 rounded transition-colors"
+                  >
+                    {monthPayments.length > 0 && selectedIds.size === monthPayments.length ? (
+                      <CheckSquare className="w-5 h-5 text-indigo-600" />
+                    ) : (
+                      <Square className="w-5 h-5 text-slate-300" />
+                    )}
+                  </button>
+                </th>
                 <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider">วันที่</th>
                 <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider">ใบเสร็จ</th>
-                <th className="px-6 py-4 w-[18%] text-xs font-bold text-slate-400 uppercase tracking-wider">ลูกค้า</th>
+                <th className="px-6 py-4 w-[15%] text-xs font-bold text-slate-400 uppercase tracking-wider">ลูกค้า</th>
                 <th className="px-6 py-4 w-[10%] text-xs font-bold text-slate-400 uppercase tracking-wider">ห้อง</th>
                 <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider text-right">ยอดรวม</th>
                 <th className="px-6 py-4 w-[12%] text-xs font-bold text-slate-400 uppercase tracking-wider text-right">วิธีชำระ</th>
@@ -333,9 +414,22 @@ export function Reports({ currentUser }: ReportsProps) {
                 const booking = bookings.find(b => b.id === payment.bookingId);
                 const bookingRooms = booking ? rooms.filter(r => booking.roomIds.includes(r.id)) : [];
                 const roomNumbers = bookingRooms.map(r => formatRoomName(r.number)).join(', ');
+                const isSelected = selectedIds.has(payment.id);
 
                 return (
-                  <tr key={payment.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={payment.id} className={`transition-colors ${isSelected ? 'bg-indigo-50/30 hover:bg-indigo-50/50' : 'hover:bg-slate-50'}`}>
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={() => handleToggleSelect(payment.id)}
+                        className="p-1 hover:bg-slate-200/50 rounded transition-colors"
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-5 h-5 text-indigo-600" />
+                        ) : (
+                          <Square className="w-5 h-5 text-slate-300" />
+                        )}
+                      </button>
+                    </td>
                     <td className="px-6 py-4 text-slate-600 font-medium">
                       {formatDateTime(payment.paidAt)}
                     </td>
@@ -356,8 +450,8 @@ export function Reports({ currentUser }: ReportsProps) {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
-                        onClick={() => handleDeletePayment(payment.id, payment.bookingId, payment.receiptNumber)}
-                        disabled={deleting === payment.id}
+                        onClick={() => handleDeletePayment(payment.id, payment.receiptNumber)}
+                        disabled={deleting === payment.id || isDeletingMulti}
                         className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
                         title="ลบรายการ"
                       >
@@ -373,7 +467,7 @@ export function Reports({ currentUser }: ReportsProps) {
               })}
               {monthPayments.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-24 text-center text-slate-400">
+                  <td colSpan={8} className="px-6 py-24 text-center text-slate-400">
                     <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
                     <p className="font-medium">ไม่พบรายการในเดือนนี้</p>
                   </td>
