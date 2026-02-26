@@ -50,7 +50,7 @@ export function Reports({ currentUser }: ReportsProps) {
     const totalVAT = monthPayments.reduce((sum, p) => sum + p.vat, 0);
     const totalSubtotal = monthPayments.reduce((sum, p) => sum + p.subtotal, 0);
     const totalTransactions = monthPayments.length;
-    
+
     // Payment method breakdown
     const cashPayments = monthPayments.filter(p => p.method === 'cash').reduce((sum, p) => sum + p.total, 0);
     const transferPayments = monthPayments.filter(p => p.method === 'transfer').reduce((sum, p) => sum + p.total, 0);
@@ -63,14 +63,14 @@ export function Reports({ currentUser }: ReportsProps) {
         return booking?.pricingTier === 'general';
       })
       .reduce((sum, p) => sum + p.total, 0);
-    
+
     const tourRevenue = monthPayments
       .filter(p => {
         const booking = bookings.find(b => b.id === p.bookingId);
         return booking?.pricingTier === 'tour';
       })
       .reduce((sum, p) => sum + p.total, 0);
-    
+
     const vipRevenue = monthPayments
       .filter(p => {
         const booking = bookings.find(b => b.id === p.bookingId);
@@ -124,20 +124,25 @@ export function Reports({ currentUser }: ReportsProps) {
     window.print();
   };
 
-  const handleDeletePayment = async (paymentId: string, receiptNumber: string) => {
+  const handleDeletePayment = async (paymentId: string, bookingId: string, receiptNumber: string) => {
     if (!confirm(`คุณต้องการลบรายการ ${receiptNumber} หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
       return;
     }
-    
+
     setDeleting(paymentId);
     try {
       await api.deletePayment(paymentId);
+      await api.deleteBooking(bookingId);
       // Refresh payments list
-      const updatedPayments = await api.getPayments();
+      const [updatedBookings, updatedPayments] = await Promise.all([
+        api.getBookings(),
+        api.getPayments(),
+      ]);
+      setBookings(updatedBookings);
       setPayments(updatedPayments);
     } catch (err) {
-      console.error('Failed to delete payment:', err);
-      alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment');
+      console.error('Failed to delete payment/booking:', err);
+      alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment or booking');
     } finally {
       setDeleting(null);
     }
@@ -161,8 +166,8 @@ export function Reports({ currentUser }: ReportsProps) {
       <div className="flex items-center gap-4">
         {Icon && <div className="p-2 bg-slate-100 rounded-lg text-slate-500"><Icon className="w-5 h-5" /></div>}
         <div>
-            <div className="text-slate-800 font-bold">{label}</div>
-            {subValue && <div className="text-sm text-slate-400">{subValue}</div>}
+          <div className="text-slate-800 font-bold">{label}</div>
+          {subValue && <div className="text-sm text-slate-400">{subValue}</div>}
         </div>
       </div>
       <div className="text-right">
@@ -182,13 +187,13 @@ export function Reports({ currentUser }: ReportsProps) {
         </div>
         <div className="flex gap-3 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2 px-4 border-r border-slate-200 pr-4 mr-2">
-             <Calendar className="w-4 h-4 text-slate-400" />
-             <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="text-sm font-bold text-slate-700 outline-none bg-transparent cursor-pointer"
-             />
+            <Calendar className="w-4 h-4 text-slate-400" />
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="text-sm font-bold text-slate-700 outline-none bg-transparent cursor-pointer"
+            />
           </div>
           <button
             onClick={handleExportCSV}
@@ -252,21 +257,21 @@ export function Reports({ currentUser }: ReportsProps) {
             ช่องทางการชำระเงิน
           </h3>
           <div className="space-y-2">
-            <BreakdownItem 
+            <BreakdownItem
               icon={Banknote}
               label="เงินสด"
               subValue="Cash Payment"
               value={formatCurrency(stats.cashPayments)}
               percentage={stats.totalRevenue > 0 ? ((stats.cashPayments / stats.totalRevenue) * 100).toFixed(1) : '0'}
             />
-            <BreakdownItem 
+            <BreakdownItem
               icon={Building}
               label="โอนเงิน"
               subValue="Bank Transfer"
               value={formatCurrency(stats.transferPayments)}
               percentage={stats.totalRevenue > 0 ? ((stats.transferPayments / stats.totalRevenue) * 100).toFixed(1) : '0'}
             />
-            <BreakdownItem 
+            <BreakdownItem
               icon={Smartphone}
               label="สแกน QR"
               subValue="QR Code Payment"
@@ -283,19 +288,19 @@ export function Reports({ currentUser }: ReportsProps) {
             ประเภทลูกค้า
           </h3>
           <div className="space-y-2">
-            <BreakdownItem 
+            <BreakdownItem
               label="ลูกค้าทั่วไป (฿890)"
               subValue="General Customer"
               value={formatCurrency(stats.generalRevenue)}
               percentage={stats.totalRevenue > 0 ? ((stats.generalRevenue / stats.totalRevenue) * 100).toFixed(1) : '0'}
             />
-            <BreakdownItem 
+            <BreakdownItem
               label="ทัวร์/แนะนำ (฿840)"
               subValue="Tour / Referral"
               value={formatCurrency(stats.tourRevenue)}
               percentage={stats.totalRevenue > 0 ? ((stats.tourRevenue / stats.totalRevenue) * 100).toFixed(1) : '0'}
             />
-            <BreakdownItem 
+            <BreakdownItem
               label="VIP / ผู้ถือหุ้น (฿400)"
               subValue="Shareholder / VIP"
               value={formatCurrency(stats.vipRevenue)}
@@ -328,7 +333,7 @@ export function Reports({ currentUser }: ReportsProps) {
                 const booking = bookings.find(b => b.id === payment.bookingId);
                 const bookingRooms = booking ? rooms.filter(r => booking.roomIds.includes(r.id)) : [];
                 const roomNumbers = bookingRooms.map(r => formatRoomName(r.number)).join(', ');
-                
+
                 return (
                   <tr key={payment.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 text-slate-600 font-medium">
@@ -343,26 +348,25 @@ export function Reports({ currentUser }: ReportsProps) {
                     <td className="px-6 py-4 text-slate-600">{roomNumbers}</td>
                     <td className="px-6 py-4 text-right font-bold text-slate-800">{formatCurrency(payment.total)}</td>
                     <td className="px-6 py-4 text-right">
-                       <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                          payment.method === 'cash' ? 'bg-orange-100 text-orange-700' :
+                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${payment.method === 'cash' ? 'bg-orange-100 text-orange-700' :
                           payment.method === 'transfer' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                       }`}>
-                          {payment.method}
-                       </span>
+                        }`}>
+                        {payment.method}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                       <button
-                          onClick={() => handleDeletePayment(payment.id, payment.receiptNumber)}
-                          disabled={deleting === payment.id}
-                          className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
-                          title="ลบรายการ"
-                       >
-                          {deleting === payment.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                       </button>
+                      <button
+                        onClick={() => handleDeletePayment(payment.id, payment.bookingId, payment.receiptNumber)}
+                        disabled={deleting === payment.id}
+                        className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                        title="ลบรายการ"
+                      >
+                        {deleting === payment.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
                     </td>
                   </tr>
                 );
@@ -379,7 +383,7 @@ export function Reports({ currentUser }: ReportsProps) {
           </table>
         </div>
       </div>
-      
+
       {/* Footer Notes */}
       <div className="p-6 rounded-3xl bg-slate-100 text-slate-500 text-sm flex items-start gap-3">
         <Info className="w-5 h-5 shrink-0 mt-0.5" />
@@ -390,12 +394,12 @@ export function Reports({ currentUser }: ReportsProps) {
 }
 
 function Users({ className }: { className?: string }) {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-            <circle cx="9" cy="7" r="4"></circle>
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-        </svg>
-    )
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+      <circle cx="9" cy="7" r="4"></circle>
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+    </svg>
+  )
 }

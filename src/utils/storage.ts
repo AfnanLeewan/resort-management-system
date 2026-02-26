@@ -196,6 +196,46 @@ export function updateBooking(
   }
 }
 
+export function deleteBooking(bookingId: string): void {
+  const bookings = getBookings();
+  const newBookings = bookings.filter((b) => b.id !== bookingId);
+  saveBookings(newBookings);
+}
+
+export function changeBookingRoom(
+  bookingId: string,
+  oldRoomId: string,
+  newRoomId: string,
+  bookingStatus: Booking['status']
+): void {
+  const bookings = getBookings();
+  const index = bookings.findIndex((b) => b.id === bookingId);
+
+  if (index !== -1) {
+    const booking = bookings[index];
+
+    // Update roomIds array
+    booking.roomIds = booking.roomIds.filter(id => id !== oldRoomId);
+    if (!booking.roomIds.includes(newRoomId)) {
+      booking.roomIds.push(newRoomId);
+    }
+
+    // Migrate roomGuests data if it exists
+    if (booking.roomGuests && booking.roomGuests[oldRoomId]) {
+      booking.roomGuests[newRoomId] = booking.roomGuests[oldRoomId];
+      delete booking.roomGuests[oldRoomId];
+    }
+
+    saveBookings(bookings);
+
+    // Update Room statuses
+    if (bookingStatus === 'checked-in') {
+      updateRoomStatus(oldRoomId, 'cleaning', undefined);
+      updateRoomStatus(newRoomId, 'occupied', bookingId);
+    }
+  }
+}
+
 // Payment operations
 export function getPayments(): Payment[] {
   return loadFromStorage<Payment[]>(STORAGE_KEYS.PAYMENTS, []);
@@ -316,10 +356,10 @@ export function addAttendanceRecord(record: AttendanceRecord): void {
 export function toggleUserAttendance(userId: string, type: 'check-in' | 'check-out'): void {
   const users = getUsers();
   const user = users.find(u => u.id === userId);
-  
+
   if (user) {
     const timestamp = new Date().toISOString();
-    
+
     // Update user status
     user.status = type === 'check-in' ? 'on-duty' : 'off-duty';
     if (type === 'check-in') {
@@ -329,7 +369,7 @@ export function toggleUserAttendance(userId: string, type: 'check-in' | 'check-o
       user.lastCheckOut = timestamp;
       user.isOnline = false; // Auto set offline when checking out (optional, but makes sense)
     }
-    
+
     saveUsers(users);
 
     // Add record
@@ -343,24 +383,24 @@ export function toggleUserAttendance(userId: string, type: 'check-in' | 'check-o
 }
 
 export function recordLeave(userId: string, date: string, reason: string): void {
-    const users = getUsers();
-    const user = users.find(u => u.id === userId);
-    
-    if (user) {
-        // We might want to update status if the leave is TODAY, but for now just record it
-        // user.status = 'on-leave'; 
-        // saveUsers(users);
+  const users = getUsers();
+  const user = users.find(u => u.id === userId);
 
-        addAttendanceRecord({
-            id: `ATT-LEAVE-${Date.now()}`,
-            userId,
-            type: 'leave',
-            timestamp: new Date().toISOString(), // Record creation time
-            leaveDate: date, // The actual leave date
-            leaveReason: reason,
-            note: reason
-        });
-    }
+  if (user) {
+    // We might want to update status if the leave is TODAY, but for now just record it
+    // user.status = 'on-leave'; 
+    // saveUsers(users);
+
+    addAttendanceRecord({
+      id: `ATT-LEAVE-${Date.now()}`,
+      userId,
+      type: 'leave',
+      timestamp: new Date().toISOString(), // Record creation time
+      leaveDate: date, // The actual leave date
+      leaveReason: reason,
+      note: reason
+    });
+  }
 }
 
 export function toggleUserOnlineStatus(userId: string): void {

@@ -73,6 +73,7 @@ function mapBookingFromDB(row: any, roomIds: string[] = []): Booking {
     status: row.status,
     groupName: row.group_name || undefined,
     notes: row.notes || undefined,
+    roomGuests: row.room_guests || undefined,
     createdAt: row.created_at,
     createdBy: row.created_by || '',
   };
@@ -443,6 +444,7 @@ export async function addBooking(booking: Booking): Promise<string> {
     status: booking.status,
     group_name: booking.groupName || null,
     notes: booking.notes || null,
+    room_guests: booking.roomGuests || null,
     // created_by omitted - would need valid UUID from users table
   }).select('id').single();
 
@@ -466,7 +468,7 @@ export async function addBooking(booking: Booking): Promise<string> {
         const num = parseInt(id.toString().replace(/\D/g, ''));
         return isNaN(num) ? id : num;
       }));
-    
+
     // Also try matching by id directly (in case roomIds are UUIDs)
     const { data: roomsByUuid } = await supabase
       .from('rooms')
@@ -529,6 +531,7 @@ export async function updateBooking(
   if (updates.status !== undefined) dbUpdates.status = updates.status;
   if (updates.groupName !== undefined) dbUpdates.group_name = updates.groupName;
   if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+  if (updates.roomGuests !== undefined) dbUpdates.room_guests = updates.roomGuests;
 
   const { error } = await supabase
     .from('bookings')
@@ -538,6 +541,80 @@ export async function updateBooking(
   if (error) {
     console.error('Error updating booking:', error);
     throw error;
+  }
+}
+
+export async function deleteBooking(bookingId: string): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.deleteBooking(bookingId);
+    return;
+  }
+
+  // Delete booking_rooms first due to foreign key constraints if any exist
+  await supabase
+    .from('booking_rooms')
+    .delete()
+    .eq('booking_id', bookingId);
+
+  // Delete the booking itself
+  const { error } = await supabase
+    .from('bookings')
+    .delete()
+    .eq('id', bookingId);
+
+  if (error) {
+    console.error('Error deleting booking:', error);
+    throw error;
+  }
+}
+
+export async function changeBookingRoom(
+  bookingId: string,
+  oldRoomId: string,
+  newRoomId: string,
+  bookingStatus: Booking['status']
+): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.changeBookingRoom(bookingId, oldRoomId, newRoomId, bookingStatus);
+    return;
+  }
+
+  // 1. Delete old mapping
+  await supabase
+    .from('booking_rooms')
+    .delete()
+    .eq('booking_id', bookingId)
+    .eq('room_id', oldRoomId);
+
+  // 2. Insert new mapping
+  await supabase
+    .from('booking_rooms')
+    .insert([{ booking_id: bookingId, room_id: newRoomId }] as any);
+
+  // 3. Update room statuses if the booking is currently active
+  if (bookingStatus === 'checked-in') {
+    await updateRoomStatus(oldRoomId, 'cleaning', undefined);
+    await updateRoomStatus(newRoomId, 'occupied', bookingId);
+  }
+
+  // 4. Migrate roomGuests data if any exists for this room
+  const { data: bookingData } = await supabase
+    .from('bookings')
+    .select('room_guests')
+    .eq('id', bookingId)
+    .single();
+
+  if (bookingData && bookingData.room_guests) {
+    const roomGuests = bookingData.room_guests as Record<string, any>;
+    if (roomGuests[oldRoomId]) {
+      roomGuests[newRoomId] = roomGuests[oldRoomId];
+      delete roomGuests[oldRoomId];
+
+      await supabase
+        .from('bookings')
+        .update({ room_guests: roomGuests })
+        .eq('id', bookingId);
+    }
   }
 }
 
@@ -600,21 +677,21 @@ export async function getPaymentByBookingId(bookingId: string): Promise<Payment 
   }
 
   if (!data) return null;
-  
+
   // Fetch charges
   const { data: chargesData } = await supabase
     .from('charges')
     .select('*')
     .eq('booking_id', bookingId);
 
-   const charges = (chargesData || []).map(c => ({
-        id: c.id,
-        bookingId: c.booking_id,
-        type: c.type as Charge['type'],
-        description: c.description,
-        amount: Number(c.amount),
-        authorizedBy: c.authorized_by || undefined,
-      }));
+  const charges = (chargesData || []).map(c => ({
+    id: c.id,
+    bookingId: c.booking_id,
+    type: c.type as Charge['type'],
+    description: c.description,
+    amount: Number(c.amount),
+    authorizedBy: c.authorized_by || undefined,
+  }));
 
   return mapPaymentFromDB(data, charges);
 }
@@ -628,7 +705,7 @@ export async function addPayment(payment: Payment): Promise<void> {
   // First, we need to get the Supabase booking UUID from our local booking ID
   // The booking_id in payment might be a local ID like "BK..." or a Supabase UUID
   let bookingUuid = payment.bookingId;
-  
+
   // Try to find the booking in Supabase if it looks like a local ID
   if (!payment.bookingId.includes('-')) {
     // It's not a UUID, try to find the booking by matching data
@@ -730,8 +807,8 @@ export async function getNextReceiptNumber(): Promise<string> {
 
   const { data, error } = await supabase.rpc('get_next_counter', { counter_id: 'receipt' });
 
-  if (error) {
-    console.error('Error getting receipt number:', error);
+  if (error || data === null || data === undefined) {
+    console.error('Error getting receipt number:', error || 'Returned null');
     return localStorage.getNextReceiptNumber();
   }
 
@@ -748,8 +825,8 @@ export async function getNextInvoiceNumber(): Promise<string> {
 
   const { data, error } = await supabase.rpc('get_next_counter', { counter_id: 'invoice' });
 
-  if (error) {
-    console.error('Error getting invoice number:', error);
+  if (error || data === null || data === undefined) {
+    console.error('Error getting invoice number:', error || 'Returned null');
     return localStorage.getNextInvoiceNumber();
   }
 
@@ -801,7 +878,7 @@ export async function addMaintenanceReport(report: MaintenanceReport): Promise<M
     console.error('Error adding maintenance report:', error);
     throw error;
   }
-  
+
   // Return the actual data from DB, mapped to our type
   return mapMaintenanceFromDB(data);
 }

@@ -14,7 +14,7 @@ interface CheckOutModalProps {
   existingPayment?: Payment | null; // If provided, show receipt view directly
 }
 const getChargeLabel = (type: string) => {
-  switch(type) {
+  switch (type) {
     case 'service': return 'บริการ';
     case 'food': return 'อาหาร/เครื่องดื่ม';
     case 'room': return 'เตียงเสริม';
@@ -33,9 +33,9 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  
+
   // Extra Charges State
-  const [extraCharges, setExtraCharges] = useState<{type: string, description: string, amount: number}[]>([]);
+  const [extraCharges, setExtraCharges] = useState<{ type: string, description: string, amount: number }[]>([]);
   const [newExtraCharge, setNewExtraCharge] = useState({ type: 'other', description: '', amount: 0 });
   const handleAddExtraCharge = () => {
     if (!newExtraCharge.description || newExtraCharge.amount <= 0) return;
@@ -67,10 +67,10 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
     const chargeList: Charge[] = [];
     const nights = calculateNights(booking.checkInDate, booking.checkOutDate);
     const numberOfRooms = booking.roomIds.length;
-    
+
     // Per-room rate: baseRate is the rate per room, not total
     const perRoomRate = booking.baseRate;
-    
+
     // Room charges - each room is charged the per-room rate
     booking.roomIds.forEach((roomId, index) => {
       const room = rooms.find(r => r.id === roomId);
@@ -92,7 +92,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
           // Early check-in charge is calculated per room, then multiplied by number of rooms
           const perRoomEarlyCharge = calculateEarlyCheckInCharge(hoursEarly, perRoomRate);
           const totalEarlyCharge = perRoomEarlyCharge * numberOfRooms;
-          const description = hoursEarly > 6 
+          const description = hoursEarly > 6
             ? `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง (คิดเต็มวัน) x ${numberOfRooms} ห้อง`
             : `เช็คอินก่อนเวลา ${hoursEarly} ชั่วโมง @ ฿50/ชม. x ${numberOfRooms} ห้อง`;
           chargeList.push({
@@ -115,8 +115,8 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
         const perRoomLateCharge = calculateLateCheckOutCharge(hoursLate, perRoomRate);
         const totalLateCharge = perRoomLateCharge * numberOfRooms;
         const description = hoursLate > 6
-            ? `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง (คิดเต็มวัน) x ${numberOfRooms} ห้อง`
-            : `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง @ ฿50/ชม. x ${numberOfRooms} ห้อง`;
+          ? `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง (คิดเต็มวัน) x ${numberOfRooms} ห้อง`
+          : `เช็คเอาท์ช้า ${hoursLate} ชั่วโมง @ ฿50/ชม. x ${numberOfRooms} ห้อง`;
         chargeList.push({
           id: `charge-late-checkout`,
           bookingId: booking.id,
@@ -128,7 +128,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
     }
     // Additional Charges from Booking Details
     if (booking.additionalCharges && booking.additionalCharges.length > 0) {
-        chargeList.push(...booking.additionalCharges);
+      chargeList.push(...booking.additionalCharges);
     }
     // Deposit Deduction
     if (booking.deposit && booking.deposit > 0) {
@@ -156,19 +156,19 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
       // Allowed: 'room', 'early-checkin', 'late-checkout', 'discount', 'other'
       let dbType = 'other';
       if (charge.type === 'room') dbType = 'room';
-      
+
       chargeList.push({
         id: `charge-extra-${index}-${Date.now()}`,
         bookingId: booking.id,
         type: dbType as any,
-        description: charge.type !== 'other' && charge.type !== 'room' 
+        description: charge.type !== 'other' && charge.type !== 'room'
           ? `[${getChargeLabel(charge.type)}] ${charge.description}`
           : charge.description,
         amount: charge.amount,
       });
     });
     // Discount
-    if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management')) {
+    if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management' || currentUser.role === 'front-desk')) {
       chargeList.push({
         id: `charge-discount`,
         bookingId: booking.id,
@@ -187,7 +187,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
   // Extract VAT and Base Price from the Total
   const vat = useMemo(() => extractVAT(total), [total]);
   const subtotal = useMemo(() => extractBasePrice(total), [total]);
-  const canApplyDiscount = currentUser.role === 'board' || currentUser.role === 'management';
+  const canApplyDiscount = currentUser.role === 'board' || currentUser.role === 'management' || currentUser.role === 'front-desk';
   const handlePayment = async () => {
     // Removed blocking confirm dialog for better UX
     setProcessing(true);
@@ -213,7 +213,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
       };
 
       await api.addPayment(payment);
-      
+
       // Update booking to 'checked-in' (no-op) or just skip status update
       // We don't set 'paid' status in DB because it might be restricted by ENUM
       // The existence of a Payment record implies 'paid' status in the UI
@@ -225,7 +225,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
 
       setReceipt(payment);
       setShowReceipt(true);
-      
+
       // We don't close the modal yet, showing receipt first
     } catch (err) {
       console.error('Payment failed:', err);
@@ -237,18 +237,18 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
 
   const handleFinalizeCheckOut = async () => {
     if (!confirm('ยืนยันการเช็คเอาท์? ห้องจะถูกเปลี่ยนสถานะเป็น "ทำความสะอาด"')) return;
-    
+
     setProcessing(true);
     try {
-        await api.updateBooking(booking.id, {
-            status: 'checked-out',
-            actualCheckOutTime: checkOutTime,
-        });
+      await api.updateBooking(booking.id, {
+        status: 'checked-out',
+        actualCheckOutTime: checkOutTime,
+      });
 
-       // Update room status and send LINE notifications to housekeepers
+      // Update room status and send LINE notifications to housekeepers
       for (const roomId of booking.roomIds) {
         await api.updateRoomStatus(roomId, 'cleaning');
-        
+
         // Find the room to get room number and type
         const room = bookingRooms.find(r => r.id === roomId);
         if (room) {
@@ -269,15 +269,15 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
           }
         }
       }
-      
+
       alert('✅ เช็คเอาท์สำเร็จ / Check-out successful!');
       onComplete();
 
     } catch (err) {
-        console.error('Checkout failed:', err);
-        alert('❌ ไม่สามารถเช็คเอาท์ได้');
+      console.error('Checkout failed:', err);
+      alert('❌ ไม่สามารถเช็คเอาท์ได้');
     } finally {
-        setProcessing(false);
+      setProcessing(false);
     }
   };
   const handlePrintReceipt = () => {
@@ -304,16 +304,16 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
                 <Printer className="w-5 h-5" />
                 <span>พิมพ์</span>
               </button>
-              
+
               {/* If payment successful (receipt exists), allow checkout. If checking out (final), show close */}
               {receipt ? (
-                  <button
-                    onClick={handleFinalizeCheckOut}
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl transition-colors font-bold shadow-lg shadow-blue-200"
-                  >
-                    <LogOut className="w-5 h-5" />
-                    <span>เช็คเอาท์ทันที</span>
-                  </button>
+                <button
+                  onClick={handleFinalizeCheckOut}
+                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl transition-colors font-bold shadow-lg shadow-blue-200"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span>เช็คเอาท์ทันที</span>
+                </button>
               ) : null}
 
               <button
@@ -328,14 +328,14 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
             {/* Header */}
             <div className="text-center pb-6 border-b border-slate-100 space-y-1">
               <div className="flex justify-center mb-4">
-                 <img src={logo} alt="Royyan Resort Logo" className="h-24 w-auto object-contain" />
+                <img src={logo} alt="Royyan Resort Logo" className="h-24 w-auto object-contain" />
               </div>
               <h1 className="text-2xl font-bold text-slate-900">รอยยาน รีสอร์ท</h1>
               <h2 className="text-xl font-bold text-slate-900 mb-2">ROYYAN RESORT</h2>
-              
+
               <div className="text-sm font-bold text-slate-800">บริษัท รอยยาน คอร์ปอเรชั่น (ไทยแลนด์) จำกัด</div>
               <div className="text-sm font-bold text-slate-800 mb-2">ROYYAN CORPORATION (THAILAND) Co., LTD.</div>
-              
+
               <div className="text-xs text-slate-600">เลขที่ 478 หมู่ที่ 2 ถนนยนตรการกำธร ตำบลฉลุง อำเภอเมือง จังหวัดสตูล 91140</div>
               <div className="text-xs text-slate-600">Address: No. 478 Moo 2 Yontrakankumton Rd., Chalung, Muang, Satun. 91140</div>
               <div className="text-xs text-slate-600 font-medium mt-1">
@@ -344,30 +344,30 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
             </div>
             {/* Receipt Numbers Row */}
             <div className="py-2 px-2">
-                <div className="flex justify-between items-end mb-2">
-                    <div className="text-slate-800 font-bold text-lg w-1/3">เล่มที่ 001</div>
-                    <div className="text-center w-1/3">
-                        <span className="text-2xl font-bold text-slate-900 border-b-2 border-slate-900 pb-1">ใบเสร็จรับเงิน</span>
-                    </div>
-                    <div className="text-right w-1/3 space-y-1">
-                        <div className="text-slate-800 font-bold text-lg font-mono">No. {receipt.receiptNumber}</div>
-                        <div className="text-slate-600 text-sm font-mono">Tax Inv. {receipt.invoiceNumber}</div>
-                    </div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="text-slate-800 font-bold text-lg w-1/3">เล่มที่ 001</div>
+                <div className="text-center w-1/3">
+                  <span className="text-2xl font-bold text-slate-900 border-b-2 border-slate-900 pb-1">ใบเสร็จรับเงิน</span>
                 </div>
-                <div className="flex justify-end">
-                    <div className="text-right text-slate-800">
-                        <span className="font-bold mr-2">วันที่ Date :</span>
-                        <span className="border-b border-slate-400 border-dotted px-2 inline-block min-w-[150px] text-center font-medium">
-                            {formatDateTime(receipt.paidAt)}
-                        </span>
-                    </div>
+                <div className="text-right w-1/3 space-y-1">
+                  <div className="text-slate-800 font-bold text-lg font-mono">No. {receipt.receiptNumber}</div>
+                  <div className="text-slate-600 text-sm font-mono">Tax Inv. {receipt.invoiceNumber}</div>
                 </div>
+              </div>
+              <div className="flex justify-end">
+                <div className="text-right text-slate-800">
+                  <span className="font-bold mr-2">วันที่ Date :</span>
+                  <span className="border-b border-slate-400 border-dotted px-2 inline-block min-w-[150px] text-center font-medium">
+                    {formatDateTime(receipt.paidAt)}
+                  </span>
+                </div>
+              </div>
             </div>
             {/* Guest Info */}
             <div className="border border-slate-200 rounded-2xl p-6">
               <h3 className="text-slate-800 font-bold mb-4 flex items-center gap-2">
-                 <UserIcon className="w-5 h-5 text-orange-500" />
-                 ข้อมูลผู้เข้าพัก
+                <UserIcon className="w-5 h-5 text-orange-500" />
+                ข้อมูลผู้เข้าพัก
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -428,13 +428,13 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
             {/* Payment Method */}
             <div className="bg-orange-50 border border-orange-100 rounded-2xl p-6 flex items-center justify-between">
               <div>
-                  <div className="text-orange-800 text-sm font-bold">วิธีการชำระเงิน</div>
-                  <div className="text-orange-600 text-sm">Payment Method</div>
+                <div className="text-orange-800 text-sm font-bold">วิธีการชำระเงิน</div>
+                <div className="text-orange-600 text-sm">Payment Method</div>
               </div>
               <div className="text-orange-900 font-bold text-lg flex items-center gap-2">
-                {receipt.method === 'cash' && <><Banknote className="w-5 h-5"/> เงินสด / Cash</>}
-                {receipt.method === 'transfer' && <><Building className="w-5 h-5"/> โอนเงิน / Bank Transfer</>}
-                {receipt.method === 'qr' && <><Smartphone className="w-5 h-5"/> QR Code</>}
+                {receipt.method === 'cash' && <><Banknote className="w-5 h-5" /> เงินสด / Cash</>}
+                {receipt.method === 'transfer' && <><Building className="w-5 h-5" /> โอนเงิน / Bank Transfer</>}
+                {receipt.method === 'qr' && <><Smartphone className="w-5 h-5" /> QR Code</>}
               </div>
             </div>
             <div className="text-center text-slate-400 text-xs pt-6 border-t border-slate-100">
@@ -465,8 +465,8 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
             {/* Guest Info */}
             <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 h-fit">
               <h3 className="text-slate-800 font-bold mb-4 flex items-center gap-2">
-                 <UserIcon className="w-5 h-5 text-orange-500" />
-                 ข้อมูลการจอง
+                <UserIcon className="w-5 h-5 text-orange-500" />
+                ข้อมูลการจอง
               </h3>
               <div className="space-y-4">
                 <div className="flex justify-between">
@@ -478,24 +478,24 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
                   <div className="text-slate-900 font-medium">{roomNumbers}</div>
                 </div>
                 <div className="flex justify-between">
-                    <div className="text-slate-500 text-sm">เช็คอินจริง</div>
-                    <div className="text-slate-900 font-medium">{booking.actualCheckInTime ? formatDateTime(booking.actualCheckInTime) : '-'}</div>
+                  <div className="text-slate-500 text-sm">เช็คอินจริง</div>
+                  <div className="text-slate-900 font-medium">{booking.actualCheckInTime ? formatDateTime(booking.actualCheckInTime) : '-'}</div>
                 </div>
-                 <div className="flex justify-between">
-                    <div className="text-slate-500 text-sm">ประเภทลูกค้า</div>
-                    <div className="px-2 py-0.5 rounded bg-white border border-slate-200 text-xs font-bold text-slate-600">
-                        {booking.pricingTier === 'general' && 'ทั่วไป (฿890)'}
-                        {booking.pricingTier === 'tour' && 'ทัวร์ (฿840)'}
-                        {booking.pricingTier === 'vip' && 'VIP (฿400)'}
-                    </div>
+                <div className="flex justify-between">
+                  <div className="text-slate-500 text-sm">ประเภทลูกค้า</div>
+                  <div className="px-2 py-0.5 rounded bg-white border border-slate-200 text-xs font-bold text-slate-600">
+                    {booking.pricingTier === 'general' && 'ทั่วไป (฿890)'}
+                    {booking.pricingTier === 'tour' && 'ทัวร์ (฿840)'}
+                    {booking.pricingTier === 'vip' && 'VIP (฿400)'}
+                  </div>
                 </div>
               </div>
             </div>
             {/* Check-out Time */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 h-fit">
-               <label className="block text-slate-700 font-bold mb-2 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-orange-500" />
-                  เวลาเช็คเอาท์จริง
+              <label className="block text-slate-700 font-bold mb-2 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-orange-500" />
+                เวลาเช็คเอาท์จริง
               </label>
               <input
                 type="datetime-local"
@@ -511,174 +511,174 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
           </div>
           {/* Charges Summary */}
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
-             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-                <h3 className="text-slate-800 font-bold flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-orange-500" />
-                    สรุปค่าใช้จ่าย
-                </h3>
-             </div>
-             <div className="p-6">
-                <table className="w-full">
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+              <h3 className="text-slate-800 font-bold flex items-center gap-2">
+                <FileText className="w-5 h-5 text-orange-500" />
+                สรุปค่าใช้จ่าย
+              </h3>
+            </div>
+            <div className="p-6">
+              <table className="w-full">
                 <tbody className="divide-y divide-slate-100">
-                    {charges.map((charge, index) => (
+                  {charges.map((charge, index) => (
                     <tr key={index}>
-                        <td className="py-3 text-slate-800 text-sm">{charge.description}</td>
-                        <td className="py-3 text-right text-slate-800 font-mono font-medium">{formatCurrency(charge.amount)}</td>
+                      <td className="py-3 text-slate-800 text-sm">{charge.description}</td>
+                      <td className="py-3 text-right text-slate-800 font-mono font-medium">{formatCurrency(charge.amount)}</td>
                     </tr>
-                    ))}
+                  ))}
                 </tbody>
                 <tfoot className="border-t border-slate-200">
-                    <tr>
-                        <td className="py-3 text-slate-500 text-right text-sm pt-4">ยอดรวมก่อน VAT</td>
-                        <td className="py-3 text-slate-800 text-right font-mono pt-4">{formatCurrency(subtotal)}</td>
-                    </tr>
-                    <tr>
-                        <td className="py-3 text-slate-500 text-right text-sm">VAT 7% (รวม��นราคาแล้ว)</td>
-                        <td className="py-3 text-slate-800 text-right font-mono">{formatCurrency(vat)}</td>
-                    </tr>
-                    <tr className="border-t border-slate-100">
-                        <td className="py-4 text-slate-800 text-right font-bold text-lg">ยอดรวมสุทธิ</td>
-                        <td className="py-4 text-orange-600 text-right font-bold text-2xl font-mono">{formatCurrency(total)}</td>
-                    </tr>
+                  <tr>
+                    <td className="py-3 text-slate-500 text-right text-sm pt-4">ยอดรวมก่อน VAT</td>
+                    <td className="py-3 text-slate-800 text-right font-mono pt-4">{formatCurrency(subtotal)}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 text-slate-500 text-right text-sm">VAT 7% (รวม��นราคาแล้ว)</td>
+                    <td className="py-3 text-slate-800 text-right font-mono">{formatCurrency(vat)}</td>
+                  </tr>
+                  <tr className="border-t border-slate-100">
+                    <td className="py-4 text-slate-800 text-right font-bold text-lg">ยอดรวมสุทธิ</td>
+                    <td className="py-4 text-orange-600 text-right font-bold text-2xl font-mono">{formatCurrency(total)}</td>
+                  </tr>
                 </tfoot>
-                </table>
-             </div>
+              </table>
+            </div>
           </div>
           {/* Optional Services & Extra Expenses */}
           <div className="bg-purple-50/50 border border-purple-200 rounded-2xl p-6 mb-8">
-               <h3 className="text-purple-800 font-bold mb-4 flex items-center gap-2">
-                  <ShoppingBag className="w-5 h-5" />
-                  บริการเสริม & ค่าใช้จ่ายอื่นๆ
-               </h3>
-               
-               {/* Input Row */}
-               <div className="flex flex-col gap-4 mb-4">
-                  <div className="grid grid-cols-[1fr_2fr] gap-4">
-                    <select
-                      value={newExtraCharge.type}
-                      onChange={(e) => setNewExtraCharge({...newExtraCharge, type: e.target.value})}
-                      className="px-4 py-3 border border-purple-200 rounded-xl focus:border-purple-500 outline-none bg-white text-purple-900 font-bold"
-                    >
-                      <option value="other">อื่นๆ</option>
-                      <option value="service" label="บริการ">บริการ</option>
-                      <option value="food" label="อาหาร/เครื่องดื่ม">อาหาร/เครื่องดื่ม</option>
-                      <option value="room" label="เตียงเสริม">เตียงเสริม</option>
-                    </select>
-                    <input
-                        type="text"
-                        value={newExtraCharge.description}
-                        onChange={(e) => setNewExtraCharge({...newExtraCharge, description: e.target.value})}
-                        className="px-4 py-3 border border-purple-200 rounded-xl focus:border-purple-500 outline-none bg-white text-purple-900"
-                        placeholder="รายละเอียดรายการ (เช่น เตียงเสริม)"
-                    />
-                  </div>
-                  <div className="grid grid-cols-[2fr_1fr] gap-4 items-end">
-                      <div className="flex items-center gap-2">
-                         <span className="text-purple-800 text-sm font-bold whitespace-nowrap">ราคา (บาท):</span>
-                         <input
-                            type="number"
-                            min="0"
-                            value={newExtraCharge.amount === 0 ? '' : newExtraCharge.amount}
-                            onChange={(e) => setNewExtraCharge({...newExtraCharge, amount: parseFloat(e.target.value) || 0})}
-                            className="w-full px-4 py-3 border border-purple-200 rounded-xl focus:border-purple-500 outline-none bg-white text-purple-900 font-bold text-center"
-                            placeholder="0.00"
-                         />
-                      </div>
-                      <button
-                        onClick={handleAddExtraCharge}
-                        disabled={!newExtraCharge.description || newExtraCharge.amount <= 0}
-                        className="h-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Plus className="w-5 h-5" />
-                        เพิ่มรายการ
-                      </button>
-                  </div>
-               </div>
-               {/* Added Items List */}
-               {extraCharges.length > 0 ? (
-                 <div className="bg-white rounded-xl border border-purple-100 overflow-hidden">
-                    <table className="w-full">
-                      <tbody className="divide-y divide-purple-50">
-                        {extraCharges.map((charge, index) => (
-                          <tr key={index} className="group hover:bg-purple-50/50">
-                            <td className="py-3 px-4 text-slate-700 text-sm">{charge.description}</td>
-                            <td className="py-3 px-4 text-right text-slate-700 font-bold">{formatCurrency(charge.amount)}</td>
-                            <td className="py-3 px-4 w-10">
-                              <button 
-                                onClick={() => handleRemoveExtraCharge(index)}
-                                className="text-slate-400 hover:text-red-500 transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                 </div>
-               ) : (
-                 <div className="text-center py-6 border-2 border-dashed border-purple-100 rounded-xl text-slate-300 text-sm">
-                    ไม่มีรายการเพิ่มเติม
-                 </div>
-               )}
+            <h3 className="text-purple-800 font-bold mb-4 flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5" />
+              บริการเสริม & ค่าใช้จ่ายอื่นๆ
+            </h3>
+
+            {/* Input Row */}
+            <div className="flex flex-col gap-4 mb-4">
+              <div className="grid grid-cols-[1fr_2fr] gap-4">
+                <select
+                  value={newExtraCharge.type}
+                  onChange={(e) => setNewExtraCharge({ ...newExtraCharge, type: e.target.value })}
+                  className="px-4 py-3 border border-purple-200 rounded-xl focus:border-purple-500 outline-none bg-white text-purple-900 font-bold"
+                >
+                  <option value="other">อื่นๆ</option>
+                  <option value="service" label="บริการ">บริการ</option>
+                  <option value="food" label="อาหาร/เครื่องดื่ม">อาหาร/เครื่องดื่ม</option>
+                  <option value="room" label="เตียงเสริม">เตียงเสริม</option>
+                </select>
+                <input
+                  type="text"
+                  value={newExtraCharge.description}
+                  onChange={(e) => setNewExtraCharge({ ...newExtraCharge, description: e.target.value })}
+                  className="px-4 py-3 border border-purple-200 rounded-xl focus:border-purple-500 outline-none bg-white text-purple-900"
+                  placeholder="รายละเอียดรายการ (เช่น เตียงเสริม)"
+                />
+              </div>
+              <div className="grid grid-cols-[2fr_1fr] gap-4 items-end">
+                <div className="flex items-center gap-2">
+                  <span className="text-purple-800 text-sm font-bold whitespace-nowrap">ราคา (บาท):</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newExtraCharge.amount === 0 ? '' : newExtraCharge.amount}
+                    onChange={(e) => setNewExtraCharge({ ...newExtraCharge, amount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-4 py-3 border border-purple-200 rounded-xl focus:border-purple-500 outline-none bg-white text-purple-900 font-bold text-center"
+                    placeholder="0.00"
+                  />
+                </div>
+                <button
+                  onClick={handleAddExtraCharge}
+                  disabled={!newExtraCharge.description || newExtraCharge.amount <= 0}
+                  className="h-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Plus className="w-5 h-5" />
+                  เพิ่มรายการ
+                </button>
+              </div>
+            </div>
+            {/* Added Items List */}
+            {extraCharges.length > 0 ? (
+              <div className="bg-white rounded-xl border border-purple-100 overflow-hidden">
+                <table className="w-full">
+                  <tbody className="divide-y divide-purple-50">
+                    {extraCharges.map((charge, index) => (
+                      <tr key={index} className="group hover:bg-purple-50/50">
+                        <td className="py-3 px-4 text-slate-700 text-sm">{charge.description}</td>
+                        <td className="py-3 px-4 text-right text-slate-700 font-bold">{formatCurrency(charge.amount)}</td>
+                        <td className="py-3 px-4 w-10">
+                          <button
+                            onClick={() => handleRemoveExtraCharge(index)}
+                            className="text-slate-400 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-6 border-2 border-dashed border-purple-100 rounded-xl text-slate-300 text-sm">
+                ไม่มีรายการเพิ่มเติม
+              </div>
+            )}
           </div>
           {/* Discount Section */}
           {canApplyDiscount && (
             <div className="bg-yellow-50/50 border border-yellow-200 rounded-2xl p-6">
-               <h3 className="text-yellow-800 font-bold mb-4 flex items-center gap-2">
-                  🔐 ส่วนลดพิเศษ (Admin Only)
-               </h3>
-               <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-yellow-800 text-xs font-bold uppercase tracking-wider mb-1">จำนวนเงิน (บาท)</label>
-                    <input
-                        type="number"
-                        min="0"
-                        value={discount === 0 ? '' : discount}
-                        onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
-                        className="w-full px-4 py-3 border border-yellow-200 rounded-xl focus:border-yellow-500 outline-none bg-white text-yellow-900 font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-yellow-800 text-xs font-bold uppercase tracking-wider mb-1">เหตุผล</label>
-                    <input
-                        type="text"
-                        value={discountReason}
-                        onChange={(e) => setDiscountReason(e.target.value)}
-                        className="w-full px-4 py-3 border border-yellow-200 rounded-xl focus:border-yellow-500 outline-none bg-white text-yellow-900"
-                        placeholder="ระบุเหตุผลการลดราคา"
-                    />
-                  </div>
-               </div>
+              <h3 className="text-yellow-800 font-bold mb-4 flex items-center gap-2">
+                🔐 ส่วนลดพิเศษ (Admin Only)
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-yellow-800 text-xs font-bold uppercase tracking-wider mb-1">จำนวนเงิน (บาท)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={discount === 0 ? '' : discount}
+                    onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                    className="w-full px-4 py-3 border border-yellow-200 rounded-xl focus:border-yellow-500 outline-none bg-white text-yellow-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-yellow-800 text-xs font-bold uppercase tracking-wider mb-1">เหตุผล</label>
+                  <input
+                    type="text"
+                    value={discountReason}
+                    onChange={(e) => setDiscountReason(e.target.value)}
+                    className="w-full px-4 py-3 border border-yellow-200 rounded-xl focus:border-yellow-500 outline-none bg-white text-yellow-900"
+                    placeholder="ระบุเหตุผลการลดราคา"
+                  />
+                </div>
+              </div>
             </div>
           )}
           {/* Penalty Section */}
           <div className="bg-red-50/50 border border-red-200 rounded-2xl p-6">
-               <h3 className="text-red-800 font-bold mb-4 flex items-center gap-2">
-                  ⚠️ ค่าปรับ / ความเสียหาย
-               </h3>
-               <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-red-800 text-xs font-bold uppercase tracking-wider mb-1">จำนวนเงิน (บาท)</label>
-                    <input
-                        type="number"
-                        min="0"
-                        value={penalty === 0 ? '' : penalty}
-                        onChange={(e) => setPenalty(parseFloat(e.target.value) || 0)}
-                        className="w-full px-4 py-3 border border-red-200 rounded-xl focus:border-red-500 outline-none bg-white text-red-900 font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-red-800 text-xs font-bold uppercase tracking-wider mb-1">เหตุผล</label>
-                    <input
-                        type="text"
-                        value={penaltyReason}
-                        onChange={(e) => setPenaltyReason(e.target.value)}
-                        className="w-full px-4 py-3 border border-red-200 rounded-xl focus:border-red-500 outline-none bg-white text-red-900"
-                        placeholder="เช่น ทำแก้วแตก, กุญแจหาย"
-                    />
-                  </div>
-               </div>
+            <h3 className="text-red-800 font-bold mb-4 flex items-center gap-2">
+              ⚠️ ค่าปรับ / ความเสียหาย
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-red-800 text-xs font-bold uppercase tracking-wider mb-1">จำนวนเงิน (บาท)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={penalty === 0 ? '' : penalty}
+                  onChange={(e) => setPenalty(parseFloat(e.target.value) || 0)}
+                  className="w-full px-4 py-3 border border-red-200 rounded-xl focus:border-red-500 outline-none bg-white text-red-900 font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-red-800 text-xs font-bold uppercase tracking-wider mb-1">เหตุผล</label>
+                <input
+                  type="text"
+                  value={penaltyReason}
+                  onChange={(e) => setPenaltyReason(e.target.value)}
+                  className="w-full px-4 py-3 border border-red-200 rounded-xl focus:border-red-500 outline-none bg-white text-red-900"
+                  placeholder="เช่น ทำแก้วแตก, กุญแจหาย"
+                />
+              </div>
+            </div>
           </div>
           {/* Payment Method Selection */}
           <div>
@@ -686,33 +686,30 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
             <div className="grid grid-cols-3 gap-4">
               <button
                 onClick={() => setPaymentMethod('cash')}
-                className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${
-                  paymentMethod === 'cash'
+                className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${paymentMethod === 'cash'
                     ? 'border-orange-500 bg-orange-50 text-orange-700'
                     : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200 hover:bg-orange-50/50'
-                }`}
+                  }`}
               >
                 <Banknote className={`w-8 h-8 ${paymentMethod === 'cash' ? 'text-orange-600' : 'text-slate-400'}`} />
                 <span className="font-bold">เงินสด</span>
               </button>
               <button
                 onClick={() => setPaymentMethod('transfer')}
-                className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${
-                  paymentMethod === 'transfer'
+                className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${paymentMethod === 'transfer'
                     ? 'border-blue-500 bg-blue-50 text-blue-700'
                     : 'border-slate-200 bg-white text-slate-500 hover:border-blue-200 hover:bg-blue-50/50'
-                }`}
+                  }`}
               >
                 <Building className={`w-8 h-8 ${paymentMethod === 'transfer' ? 'text-blue-600' : 'text-slate-400'}`} />
                 <span className="font-bold">โอนเงิน</span>
               </button>
               <button
                 onClick={() => setPaymentMethod('qr')}
-                className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${
-                  paymentMethod === 'qr'
+                className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${paymentMethod === 'qr'
                     ? 'border-purple-500 bg-purple-50 text-purple-700'
                     : 'border-slate-200 bg-white text-slate-500 hover:border-purple-200 hover:bg-purple-50/50'
-                }`}
+                  }`}
               >
                 <Smartphone className={`w-8 h-8 ${paymentMethod === 'qr' ? 'text-purple-600' : 'text-slate-400'}`} />
                 <span className="font-bold">QR Code</span>
@@ -729,43 +726,43 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
                 Actually, let's allow "Check Out" if we have a receipt set.
             */}
             {receipt ? (
-                 <button
-                 onClick={handleFinalizeCheckOut}
-                 disabled={processing}
-                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-               >
-                 {processing ? (
-                   <>
-                     <Loader2 className="w-6 h-6 animate-spin" />
-                     กำลังเช็คเอาท์...
-                   </>
-                 ) : (
-                   <>
-                     <LogOut className="w-6 h-6" />
-                     ยืนยันเช็คเอาท์ (Check Out)
-                   </>
-                 )}
-               </button>
+              <button
+                onClick={handleFinalizeCheckOut}
+                disabled={processing}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processing ? (
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    กำลังเช็คเอาท์...
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="w-6 h-6" />
+                    ยืนยันเช็คเอาท์ (Check Out)
+                  </>
+                )}
+              </button>
             ) : (
-                <button
+              <button
                 onClick={handlePayment}
                 disabled={processing}
                 className="flex-1 bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-bold shadow-lg shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+              >
                 {processing ? (
-                    <>
+                  <>
                     <Loader2 className="w-6 h-6 animate-spin" />
                     กำลังประมวลผล...
-                    </>
+                  </>
                 ) : (
-                    <>
+                  <>
                     <CreditCard className="w-6 h-6" />
                     รับชำระเงิน {formatCurrency(total)}
-                    </>
+                  </>
                 )}
-                </button>
+              </button>
             )}
-            
+
             <button
               onClick={onClose}
               className="px-8 py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all"
