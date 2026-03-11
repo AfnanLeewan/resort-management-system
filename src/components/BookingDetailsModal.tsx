@@ -3,6 +3,7 @@ import { Booking, Charge, User } from '../types';
 import * as api from '../utils/api';
 import { X, Save, Plus, Trash2, FileText, User as UserIcon, Phone, CreditCard, ShoppingBag, MapPin, Banknote, Loader2, ArrowRightLeft } from 'lucide-react';
 import { formatCurrency } from '../utils/dateHelpers';
+import { formatRoomName } from '../utils/roomHelpers';
 
 interface BookingDetailsModalProps {
    booking: Booking;
@@ -34,11 +35,13 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
    const [isChangingRoom, setIsChangingRoom] = useState(false);
    const [changingRoomId, setChangingRoomId] = useState<string | null>(null);
    const [availableRooms, setAvailableRooms] = useState<any[]>([]);
+   const [allRooms, setAllRooms] = useState<any[]>([]);
    const [selectedNewRoomId, setSelectedNewRoomId] = useState('');
 
    const loadAvailableRooms = async () => {
       try {
          const rooms = await api.getRooms();
+         setAllRooms(rooms);
          setAvailableRooms(rooms.filter(r => r.status === 'available' || r.status === 'cleaning'));
       } catch (err) {
          console.error('Failed to load rooms:', err);
@@ -301,7 +304,7 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
                      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95">
                         <h3 className="text-lg font-bold text-slate-800 mb-4">เลือกห้องใหม่</h3>
                         <div className="mb-4">
-                           <p className="text-sm text-slate-500 mb-2">ย้ายจากห้อง: <span className="font-bold text-slate-700">{changingRoomId}</span></p>
+                           <p className="text-sm text-slate-500 mb-2">ย้ายจากห้อง: <span className="font-bold text-slate-700">{allRooms.find(r => r.id === changingRoomId) ? formatRoomName(allRooms.find(r => r.id === changingRoomId)!.number) : changingRoomId}</span></p>
                            <select
                               value={selectedNewRoomId}
                               onChange={(e) => setSelectedNewRoomId(e.target.value)}
@@ -310,7 +313,7 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
                               <option value="">-- เลือกห้องว่าง --</option>
                               {availableRooms.map(r => (
                                  <option key={r.id} value={r.id}>
-                                    RM{r.number} - {r.type === 'single' ? 'Single' : 'Double'} ({r.status})
+                                    {formatRoomName(r.number)} - {r.type === 'single' ? 'Single' : 'Double'} ({r.status})
                                  </option>
                               ))}
                            </select>

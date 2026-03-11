@@ -450,7 +450,7 @@ export function Reports({ currentUser }: ReportsProps) {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
-                        onClick={() => handleDeletePayment(payment.id, payment.receiptNumber)}
+                        onClick={() => handleDeletePayment(payment.id, payment.bookingId, payment.receiptNumber)}
                         disabled={deleting === payment.id || isDeletingMulti}
                         className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
                         title="ลบรายการ"
