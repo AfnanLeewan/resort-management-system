@@ -686,7 +686,7 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
                     <td className="px-6 py-4">
                         <span className="font-bold text-slate-800">{isPool ? '-' : roomNumbers}</span>
                     </td>
-                    <td className="px-6 py-4">{getStatusBadge(booking.status)}</td>
+                    <td className="px-6 py-4">{getStatusBadge(booking)}</td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2 items-center">
                         {booking.status === 'reserved' && (

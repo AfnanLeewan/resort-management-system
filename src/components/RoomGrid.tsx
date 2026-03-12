@@ -1074,6 +1074,7 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
   });
 
   const [activeDateField, setActiveDateField] = useState<'checkIn' | 'checkOut' | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Per-room guest details
   const [roomGuests, setRoomGuests] = useState<Record<string, { name: string; idNumber: string; phone: string }>>({});
@@ -1084,6 +1085,7 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.guestName || !formData.phone || !formData.checkOutDate) return;
+    if (isSubmitting) return;
 
     const booking: Booking = {
       id: `BK${Date.now()}`,
@@ -1107,12 +1109,16 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
       createdAt: new Date().toISOString(),
       createdBy: currentUser.id,
     };
+    setIsSubmitting(true);
     try {
       await api.addBooking(booking);
       onSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create booking:', err);
-      alert('❌ ไม่สามารถสร้างการจองได้');
+      const errMsg = err?.message || err?.error_description || JSON.stringify(err);
+      alert(`❌ ไม่สามารถสร้างการจองได้\n${errMsg}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
