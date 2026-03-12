@@ -1076,6 +1076,7 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
   });
 
   const [activeDateField, setActiveDateField] = useState<'checkIn' | 'checkOut' | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isGroup = rooms.length > 1;
   const label = isGroup ? `${rooms.length} ห้อง: ${rooms.map((r: any) => r.label).join(', ')}` : rooms[0].label;
@@ -1083,13 +1084,14 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.guestName || !formData.phone || !formData.checkOutDate) return;
+    if (isSubmitting) return;
 
     const booking: Booking = {
       id: `BK${Date.now()}`,
       roomIds: rooms.map((r: any) => r.id),
-      guest: { 
-          name: formData.guestName, 
-          idNumber: formData.idNumber || '-', 
+      guest: {
+          name: formData.guestName,
+          idNumber: formData.idNumber || '-',
           phone: formData.phone,
           address: formData.address || undefined
       },
@@ -1105,12 +1107,16 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
       createdAt: new Date().toISOString(),
       createdBy: currentUser.id,
     };
+    setIsSubmitting(true);
     try {
       await api.addBooking(booking);
       onSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create booking:', err);
-      alert('❌ ไม่สามารถสร้างการจองได้');
+      const errMsg = err?.message || err?.error_description || JSON.stringify(err);
+      alert(`❌ ไม่สามารถสร้างการจองได้\n${errMsg}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1351,9 +1357,12 @@ function BookingModal({ rooms, onClose, onSuccess, currentUser, initialDate }: a
              </div>
           </div>
           
-          <button type="submit" className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl font-bold text-lg shadow-lg shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-2">
-            <Check className="w-6 h-6" />
-            ยืนยันการจอง
+          <button type="submit" disabled={isSubmitting} className="w-full py-4 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white rounded-2xl font-bold text-lg shadow-lg shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-2">
+            {isSubmitting ? (
+              <><Loader2 className="w-6 h-6 animate-spin" />กำลังบันทึก...</>
+            ) : (
+              <><Check className="w-6 h-6" />ยืนยันการจอง</>
+            )}
           </button>
         </form>
       </div>
