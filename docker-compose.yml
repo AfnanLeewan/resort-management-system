@@ -152,7 +152,7 @@ services:
     container_name: resort-management-system
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-80}:80"
+      - "${APP_PORT:-8008}:80"
     depends_on:
       - supabase-gateway
     environment:
