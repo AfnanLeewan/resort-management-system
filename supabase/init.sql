@@ -4,6 +4,31 @@
 -- (Merges schema.sql + all migration patches)
 -- =====================================================
 
+-- =====================================================
+-- ROLES (required by PostgREST — create if the
+-- supabase/postgres image hasn't created them yet)
+-- =====================================================
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN
+    CREATE ROLE anon NOLOGIN NOINHERIT;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN
+    CREATE ROLE authenticated NOLOGIN NOINHERIT;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN
+    CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticator') THEN
+    CREATE ROLE authenticator NOINHERIT LOGIN PASSWORD 'postgres';
+    GRANT anon          TO authenticator;
+    GRANT authenticated TO authenticator;
+    GRANT service_role  TO authenticator;
+  END IF;
+END
+$$;
+
 -- Enable extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";

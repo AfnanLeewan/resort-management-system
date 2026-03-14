@@ -44,7 +44,7 @@ services:
       # Resort schema is applied after Supabase's own init scripts (99_ prefix)
       - ./supabase/init.sql:/docker-entrypoint-initdb.d/99_resort_schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      test: ["CMD-SHELL", "pg_isready -U supabase_admin -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 10
