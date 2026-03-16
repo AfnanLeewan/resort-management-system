@@ -1,23 +1,88 @@
 version: '3.8'
 
 services:
-  # Resort Management System - Frontend Application
+
+  # ─── Database ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: resort-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Init scripts run in alphabetical order at first startup
+      - ./supabase/roles.sql:/docker-entrypoint-initdb.d/00-roles.sql:ro
+      - ./supabase/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./supabase/migrations/fix_missing_columns.sql:/docker-entrypoint-initdb.d/02-fix-columns.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - resort-network
+
+  # ─── PostgREST ─────────────────────────────────────────────────────────────
+  rest:
+    image: postgrest/postgrest:v12.0.2
+    container_name: resort-rest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+    networks:
+      - resort-network
+
+  # ─── Kong API Gateway ──────────────────────────────────────────────────────
+  kong:
+    image: kong:2.8.1
+    container_name: resort-kong
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"   # Public API port (used by the frontend)
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+    volumes:
+      - ./supabase/kong.yml:/var/lib/kong/kong.yml:ro
+    networks:
+      - resort-network
+
+  # ─── Frontend App ──────────────────────────────────────────────────────────
   resort-app:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-        - VITE_DEMO_MODE=${VITE_DEMO_MODE:-false}
+        - VITE_SUPABASE_URL=http://localhost:8000
+        - VITE_SUPABASE_ANON_KEY=${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7URIqUAq1QK3Be03B2nzBPHnHJg9j3_BkTM}
+        - VITE_DEMO_MODE=false
     container_name: resort-management-system
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-80}:80"
-    environment:
-      - NODE_ENV=production
+      - "${APP_PORT:-3000}:80"
+    depends_on:
+      - kong
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -27,6 +92,9 @@ services:
     labels:
       - "com.resort.description=Royyan Resort Management System"
       - "com.resort.version=0.1.0"
+
+volumes:
+  db-data:
 
 networks:
   resort-network:
