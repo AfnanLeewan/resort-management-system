@@ -39,8 +39,8 @@ services:
       PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres
       PGRST_DB_SCHEMAS: public
       PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
       PGRST_DB_USE_LEGACY_GUCS: "false"
+      # No JWT_SECRET — Kong handles API key auth; PostgREST uses anon role for all requests
     networks:
       - resort-network
 
