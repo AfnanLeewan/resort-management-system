@@ -37,11 +37,13 @@ services:
           headers:
             - Accept
             - Accept-Version
+            - Accept-Profile
             - Content-Length
             - Content-MD5
             - Content-Type
             - Date
             - X-Auth-Token
+            - X-Client-Info
             - Authorization
             - apikey
             - Prefer
