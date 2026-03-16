@@ -39,8 +39,8 @@ services:
       PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres
       PGRST_DB_SCHEMAS: public
       PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
       PGRST_DB_USE_LEGACY_GUCS: "false"
-      # No JWT_SECRET — Kong handles API key auth; PostgREST uses anon role for all requests
     networks:
       - resort-network
 
@@ -73,7 +73,7 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_SUPABASE_URL=http://localhost:8000
-        - VITE_SUPABASE_ANON_KEY=${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7URIqUAq1QK3Be03B2nzBPHnHJg9j3_BkTM}
+        - VITE_SUPABASE_ANON_KEY=${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
         - VITE_DEMO_MODE=false
     container_name: resort-management-system
     restart: unless-stopped

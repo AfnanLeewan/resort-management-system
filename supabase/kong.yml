@@ -1,26 +1,20 @@
 _format_version: "1.1"
 
-###
-# Consumers — one per API key type
-###
 consumers:
   - username: anon
     keyauth_credentials:
-      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7URIqUAq1QK3Be03B2nzBPHnHJg9j3_BkTM
-    acls:
-      - group: anon
+      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
   - username: service_role
     keyauth_credentials:
       - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hj04zWl196z2-SBc0
-    acls:
-      - group: admin
 
-###
-# Services & Routes
-###
+acls:
+  - consumer: anon
+    group: anon
+  - consumer: service_role
+    group: admin
+
 services:
-
-  ## PostgREST — REST API
   - name: rest-v1
     url: http://rest:3000/
     routes:
