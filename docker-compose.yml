@@ -31,4 +31,3 @@ services:
 networks:
   resort-network:
     driver: bridge
-    name: resort-network
