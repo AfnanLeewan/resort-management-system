@@ -116,6 +116,8 @@ CREATE TABLE payments (
     subtotal DECIMAL(10, 2) NOT NULL,
     vat DECIMAL(10, 2) NOT NULL,
     total DECIMAL(10, 2) NOT NULL,
+    deposit DECIMAL(10, 2),
+    balance_due DECIMAL(10, 2),
     paid_at TIMESTAMPTZ DEFAULT NOW(),
     paid_by UUID REFERENCES users(id)
 );
