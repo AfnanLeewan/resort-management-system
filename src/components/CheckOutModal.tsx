@@ -158,7 +158,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
       });
     });
     // Discount
-    if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management')) {
+    if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management' || currentUser.role === 'front-desk')) {
       chargeList.push({
         id: `charge-discount`,
         bookingId: booking.id,

@@ -37,6 +37,7 @@ export interface Booking {
   status: 'reserved' | 'checked-in' | 'checked-out' | 'cancelled';
   groupName?: string; // For tour groups
   notes?: string;
+  roomGuests?: Record<string, Partial<Guest>>; // Add per-room guest details map, keyed by Room ID
   additionalCharges?: Charge[];
   createdAt: string;
   createdBy: string;
