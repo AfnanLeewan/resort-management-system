@@ -1,0 +1,180 @@
+version: '3.8'
+
+# =====================================================================
+# Royyan Resort Management System — Full Local Supabase Stack
+#
+# Services:
+#   supabase-db      PostgreSQL 15 with Supabase extensions (port 5432)
+#   supabase-rest    PostgREST REST API (internal only)
+#   supabase-gateway nginx API gateway — routes /rest/v1/ (port 8000)
+#   supabase-meta    Postgres Meta — schema introspection for Studio
+#   supabase-studio  Supabase Studio dashboard (port 3001)
+#   resort-app       React frontend (port 80)
+#
+# Quick start:
+#   1. docker-compose up -d          (no .env needed for local dev)
+#   2. Open http://localhost for the app, http://localhost:3001 for Studio
+#
+# JWT keys (ANON_KEY, SERVICE_ROLE_KEY) are hardcoded below — they are
+# not secret for local development. Only POSTGRES_PASSWORD and ports can
+# be overridden via .env if needed.
+# =====================================================================
+
+services:
+
+  # -------------------------------------------------------------------
+  # PostgreSQL — Supabase-flavoured image with all required extensions,
+  # roles (anon, authenticator, service_role) and RLS support built in.
+  # Our schema is mounted and applied automatically on first start.
+  # -------------------------------------------------------------------
+  supabase-db:
+    image: supabase/postgres:15.8.1.020
+    container_name: supabase-db
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+      JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      JWT_EXP: 3600
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      # Resort schema is applied after Supabase's own init scripts (99_ prefix)
+      - ./supabase/init.sql:/docker-entrypoint-initdb.d/99_resort_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supabase_admin -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - resort-network
+
+  # -------------------------------------------------------------------
+  # PostgREST — auto-generates a REST API from the PostgreSQL schema.
+  # Not exposed directly; requests go through the gateway on port 8000.
+  # -------------------------------------------------------------------
+  supabase-rest:
+    image: postgrest/postgrest:v12.2.3
+    container_name: supabase-rest
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+    networks:
+      - resort-network
+
+  # -------------------------------------------------------------------
+  # API Gateway (nginx) — single entry point for the Supabase API.
+  # Routes /rest/v1/* to PostgREST and handles CORS.
+  # Supabase JS client connects here: http://localhost:8000
+  # -------------------------------------------------------------------
+  supabase-gateway:
+    image: nginx:1.25-alpine
+    container_name: supabase-gateway
+    restart: unless-stopped
+    depends_on:
+      - supabase-rest
+    ports:
+      - "${SUPABASE_PORT:-8000}:8000"
+    volumes:
+      - ./docker/gateway.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - resort-network
+
+  # -------------------------------------------------------------------
+  # Postgres Meta — exposes schema metadata over HTTP.
+  # Required by Supabase Studio for table browsing / SQL editor.
+  # -------------------------------------------------------------------
+  supabase-meta:
+    image: supabase/postgres-meta:v0.84.2
+    container_name: supabase-meta
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: supabase-db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    networks:
+      - resort-network
+
+  # -------------------------------------------------------------------
+  # Supabase Studio — web dashboard for browsing tables, running SQL,
+  # viewing logs, etc.  Open http://localhost:3001 after startup.
+  # -------------------------------------------------------------------
+  supabase-studio:
+    image: supabase/studio:20250113-83c9420
+    container_name: supabase-studio
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    ports:
+      - "${STUDIO_PORT:-3001}:3000"
+    environment:
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DEFAULT_ORGANIZATION_NAME: Royyan Resort
+      DEFAULT_PROJECT_NAME: Resort Management System
+      SUPABASE_URL: http://supabase-gateway:8000
+      SUPABASE_PUBLIC_URL: http://localhost:${SUPABASE_PORT:-8000}
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7w9Zi3XMqPTR4TUknCYuYXA68KsgEEEuRg4
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hj04zWl196z2-SBc0
+    networks:
+      - resort-network
+
+  # -------------------------------------------------------------------
+  # Resort App — React SPA built with Vite, served by nginx.
+  # VITE_SUPABASE_URL is baked in at build time and must be the URL
+  # the *browser* can reach — i.e. http://localhost:8000 (the gateway).
+  # -------------------------------------------------------------------
+  resort-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_SUPABASE_URL=http://localhost:${SUPABASE_PORT:-8000}
+        - VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7w9Zi3XMqPTR4TUknCYuYXA68KsgEEEuRg4
+        - VITE_DEMO_MODE=${VITE_DEMO_MODE:-false}
+    container_name: resort-management-system
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8008}:80"
+    depends_on:
+      - supabase-gateway
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - resort-network
+    labels:
+      - "com.resort.description=Royyan Resort Management System"
+      - "com.resort.version=0.1.0"
+
+# =====================================================================
+volumes:
+  supabase-db-data:
+    name: resort-supabase-db-data
+
+networks:
+  resort-network:
+    driver: bridge
+    name: resort-network
