@@ -8,7 +8,7 @@ echo "============================================"
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.prd.yml \
-  up --build -d
+  up --build --force-recreate -d
 
 echo ""
 echo "✅ PRD deployment complete!"
