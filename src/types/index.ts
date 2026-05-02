@@ -65,6 +65,8 @@ export interface Payment {
   subtotal: number;
   vat: number;
   total: number;
+  deposit?: number;    // Advance payment collected at booking time
+  balanceDue?: number; // Amount to collect at checkout (total - deposit)
 }
 
 export interface MaintenanceReport {
