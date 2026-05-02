@@ -2,4 +2,4 @@ services:
   resort-app:
     container_name: resort-management-prd
     ports:
-      - "${APP_PORT:-80}:80"
+      - "${APP_PORT:-8080}:80"

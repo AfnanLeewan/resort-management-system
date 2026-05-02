@@ -2,4 +2,4 @@ services:
   resort-app:
     container_name: resort-management-uat
     ports:
-      - "${APP_PORT:-8080}:80"
+      - "${APP_PORT:-3000}:80"
