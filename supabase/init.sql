@@ -1,10 +1,37 @@
 -- =====================================================
--- Royyan Resort Management System - Database Schema
--- Run this in Supabase SQL Editor
+-- Royyan Resort Management System - Complete Schema
+-- Applied automatically on first docker-compose up
+-- (Merges schema.sql + all migration patches)
 -- =====================================================
 
--- Enable UUID extension
+-- =====================================================
+-- ROLES (required by PostgREST — create if the
+-- supabase/postgres image hasn't created them yet)
+-- =====================================================
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN
+    CREATE ROLE anon NOLOGIN NOINHERIT;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN
+    CREATE ROLE authenticated NOLOGIN NOINHERIT;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN
+    CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticator') THEN
+    CREATE ROLE authenticator NOINHERIT LOGIN PASSWORD 'postgres';
+    GRANT anon          TO authenticator;
+    GRANT authenticated TO authenticator;
+    GRANT service_role  TO authenticator;
+  END IF;
+END
+$$;
+
+-- Enable extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =====================================================
 -- ENUM TYPES
@@ -15,7 +42,8 @@ CREATE TYPE room_status AS ENUM ('available', 'occupied', 'cleaning', 'maintenan
 CREATE TYPE booking_source AS ENUM ('walk-in', 'phone', 'ota');
 CREATE TYPE pricing_tier AS ENUM ('general', 'tour', 'vip');
 CREATE TYPE payment_method AS ENUM ('cash', 'transfer', 'qr');
-CREATE TYPE user_role AS ENUM ('front-desk', 'housekeeping', 'management', 'board', 'part-time');
+-- Includes 'repair' role (added in migration vs original schema)
+CREATE TYPE user_role AS ENUM ('front-desk', 'housekeeping', 'management', 'board', 'part-time', 'repair');
 CREATE TYPE user_status AS ENUM ('on-duty', 'off-duty', 'on-leave');
 CREATE TYPE booking_status AS ENUM ('reserved', 'checked-in', 'checked-out', 'cancelled');
 CREATE TYPE charge_type AS ENUM ('room', 'early-checkin', 'late-checkout', 'discount', 'other');
@@ -60,6 +88,7 @@ CREATE TABLE rooms (
 
 -- =====================================================
 -- BOOKINGS TABLE
+-- (includes room_guests from fix_missing_columns migration)
 -- =====================================================
 
 CREATE TABLE bookings (
@@ -80,6 +109,7 @@ CREATE TABLE bookings (
     source booking_source NOT NULL DEFAULT 'walk-in',
     status booking_status DEFAULT 'reserved',
     group_name VARCHAR(200),
+    room_guests JSONB,
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     created_by UUID REFERENCES users(id)
@@ -125,20 +155,20 @@ CREATE TABLE payments (
     subtotal DECIMAL(10, 2) NOT NULL,
     vat DECIMAL(10, 2) NOT NULL,
     total DECIMAL(10, 2) NOT NULL,
-    deposit DECIMAL(10, 2),
-    balance_due DECIMAL(10, 2),
     paid_at TIMESTAMPTZ DEFAULT NOW(),
     paid_by UUID REFERENCES users(id)
 );
 
 -- =====================================================
 -- MAINTENANCE_REPORTS TABLE
+-- (includes assigned_to from add_assigned_to_repair migration)
 -- =====================================================
 
 CREATE TABLE maintenance_reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id),
     reported_by UUID REFERENCES users(id),
+    assigned_to UUID REFERENCES users(id),
     description TEXT NOT NULL,
     priority maintenance_priority DEFAULT 'medium',
     status maintenance_status DEFAULT 'pending',
@@ -178,12 +208,13 @@ CREATE TABLE inventory_items (
 
 -- =====================================================
 -- INVENTORY_TRANSACTIONS TABLE
+-- (item_id is nullable with SET NULL on delete — from fix_missing_columns)
 -- =====================================================
 
 CREATE TABLE inventory_transactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    item_id UUID NOT NULL REFERENCES inventory_items(id),
-    item_name VARCHAR(200) NOT NULL, -- Cached for history
+    item_id UUID REFERENCES inventory_items(id) ON DELETE SET NULL,
+    item_name VARCHAR(200) NOT NULL,
     date DATE NOT NULL,
     type transaction_type NOT NULL,
     quantity INTEGER NOT NULL,
@@ -206,7 +237,6 @@ CREATE TABLE counters (
     value INTEGER DEFAULT 0
 );
 
--- Initialize counters
 INSERT INTO counters (id, value) VALUES ('receipt', 0);
 INSERT INTO counters (id, value) VALUES ('invoice', 0);
 
@@ -218,6 +248,7 @@ CREATE INDEX idx_bookings_status ON bookings(status);
 CREATE INDEX idx_bookings_dates ON bookings(check_in_date, check_out_date);
 CREATE INDEX idx_rooms_status ON rooms(status);
 CREATE INDEX idx_maintenance_status ON maintenance_reports(status);
+CREATE INDEX idx_maintenance_assigned_to ON maintenance_reports(assigned_to);
 CREATE INDEX idx_attendance_user ON attendance_records(user_id);
 CREATE INDEX idx_payments_booking ON payments(booking_id);
 CREATE INDEX idx_inventory_category ON inventory_items(category);
@@ -250,10 +281,23 @@ CREATE TRIGGER update_inventory_items_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================
+-- FUNCTIONS: Counter Increment
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION get_next_counter(counter_id VARCHAR)
+RETURNS INTEGER AS $$
+DECLARE
+    next_val INTEGER;
+BEGIN
+    UPDATE counters SET value = value + 1 WHERE id = counter_id RETURNING value INTO next_val;
+    RETURN next_val;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
 -- ROW LEVEL SECURITY (RLS)
 -- =====================================================
 
--- Enable RLS on all tables
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
@@ -266,8 +310,6 @@ ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE counters ENABLE ROW LEVEL SECURITY;
 
--- Allow all operations for anon and authenticated roles (simple policy)
--- In production, you'd want more granular policies
 CREATE POLICY "Allow all for anon and authenticated" ON users FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all for anon and authenticated" ON rooms FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all for anon and authenticated" ON bookings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
@@ -280,8 +322,7 @@ CREATE POLICY "Allow all for anon and authenticated" ON inventory_items FOR ALL 
 CREATE POLICY "Allow all for anon and authenticated" ON inventory_transactions FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all for anon and authenticated" ON counters FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
--- Grant table privileges to anon and authenticated roles
--- Required for PostgREST to allow INSERT/UPDATE/DELETE via the anon key
+-- Grant privileges to anon and authenticated roles (required by PostgREST)
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;
@@ -292,7 +333,7 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 -- =====================================================
 
 INSERT INTO users (username, name, role, phone, status, is_online, shifts) VALUES
-    ('frontdesk', 'Front Desk', 'front-desk', '081-234-5678', 'on-duty', true, 
+    ('frontdesk', 'Front Desk', 'front-desk', '081-234-5678', 'on-duty', true,
      '[{"day": "Mon", "start": "08:00", "end": "17:00"}, {"day": "Tue", "start": "08:00", "end": "17:00"}, {"day": "Wed", "start": "08:00", "end": "17:00"}, {"day": "Thu", "start": "08:00", "end": "17:00"}, {"day": "Fri", "start": "08:00", "end": "17:00"}]'),
     ('housekeeping', 'Housekeeping', 'housekeeping', '081-234-5679', 'off-duty', false,
      '[{"day": "Wed", "start": "09:00", "end": "18:00"}, {"day": "Thu", "start": "09:00", "end": "18:00"}, {"day": "Fri", "start": "09:00", "end": "18:00"}, {"day": "Sat", "start": "09:00", "end": "18:00"}, {"day": "Sun", "start": "09:00", "end": "18:00"}]'),
@@ -310,17 +351,3 @@ SELECT generate_series(1, 20), 'single'::room_type, 'available'::room_status;
 -- Double beds (21-30)
 INSERT INTO rooms (number, type, status)
 SELECT generate_series(21, 30), 'double'::room_type, 'available'::room_status;
-
--- =====================================================
--- FUNCTIONS: Counter Increment
--- =====================================================
-
-CREATE OR REPLACE FUNCTION get_next_counter(counter_id VARCHAR)
-RETURNS INTEGER AS $$
-DECLARE
-    next_val INTEGER;
-BEGIN
-    UPDATE counters SET value = value + 1 WHERE id = counter_id RETURNING value INTO next_val;
-    RETURN next_val;
-END;
-$$ LANGUAGE plpgsql;

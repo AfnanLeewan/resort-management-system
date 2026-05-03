@@ -196,6 +196,46 @@ export function updateBooking(
   }
 }
 
+export function deleteBooking(bookingId: string): void {
+  const bookings = getBookings();
+  const newBookings = bookings.filter((b) => b.id !== bookingId);
+  saveBookings(newBookings);
+}
+
+export function changeBookingRoom(
+  bookingId: string,
+  oldRoomId: string,
+  newRoomId: string,
+  bookingStatus: Booking['status']
+): void {
+  const bookings = getBookings();
+  const index = bookings.findIndex((b) => b.id === bookingId);
+
+  if (index !== -1) {
+    const booking = bookings[index];
+
+    // Update roomIds array
+    booking.roomIds = booking.roomIds.filter(id => id !== oldRoomId);
+    if (!booking.roomIds.includes(newRoomId)) {
+      booking.roomIds.push(newRoomId);
+    }
+
+    // Migrate roomGuests data if it exists
+    if (booking.roomGuests && booking.roomGuests[oldRoomId]) {
+      booking.roomGuests[newRoomId] = booking.roomGuests[oldRoomId];
+      delete booking.roomGuests[oldRoomId];
+    }
+
+    saveBookings(bookings);
+
+    // Update Room statuses
+    if (bookingStatus === 'checked-in') {
+      updateRoomStatus(oldRoomId, 'cleaning', undefined);
+      updateRoomStatus(newRoomId, 'occupied', bookingId);
+    }
+  }
+}
+
 // Payment operations
 export function getPayments(): Payment[] {
   return loadFromStorage<Payment[]>(STORAGE_KEYS.PAYMENTS, []);

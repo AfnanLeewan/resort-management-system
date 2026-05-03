@@ -74,6 +74,7 @@ function mapBookingFromDB(row: any, roomIds: string[] = []): Booking {
     status: row.status,
     groupName: row.group_name || undefined,
     notes: row.notes || undefined,
+    roomGuests: row.room_guests || undefined,
     createdAt: row.created_at,
     createdBy: row.created_by || '',
   };
@@ -93,6 +94,8 @@ function mapPaymentFromDB(row: any, charges: Charge[] = []): Payment {
     subtotal: Number(row.subtotal),
     vat: Number(row.vat),
     total: Number(row.total),
+    ...(row.deposit != null && { deposit: Number(row.deposit) }),
+    ...(row.balance_due != null && { balanceDue: Number(row.balance_due) }),
   };
 }
 
@@ -444,6 +447,7 @@ export async function addBooking(booking: Booking): Promise<string> {
     status: booking.status,
     group_name: booking.groupName || null,
     notes: booking.notes || null,
+    room_guests: booking.roomGuests || null,
     // created_by omitted - would need valid UUID from users table
   }).select('id').single();
 
@@ -530,6 +534,7 @@ export async function updateBooking(
   if (updates.status !== undefined) dbUpdates.status = updates.status;
   if (updates.groupName !== undefined) dbUpdates.group_name = updates.groupName;
   if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+  if (updates.roomGuests !== undefined) dbUpdates.room_guests = updates.roomGuests;
 
   const { error } = await supabase
     .from('bookings')
@@ -539,6 +544,80 @@ export async function updateBooking(
   if (error) {
     console.error('Error updating booking:', error);
     throw error;
+  }
+}
+
+export async function deleteBooking(bookingId: string): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.deleteBooking(bookingId);
+    return;
+  }
+
+  // Delete booking_rooms first due to foreign key constraints if any exist
+  await supabase
+    .from('booking_rooms')
+    .delete()
+    .eq('booking_id', bookingId);
+
+  // Delete the booking itself
+  const { error } = await supabase
+    .from('bookings')
+    .delete()
+    .eq('id', bookingId);
+
+  if (error) {
+    console.error('Error deleting booking:', error);
+    throw error;
+  }
+}
+
+export async function changeBookingRoom(
+  bookingId: string,
+  oldRoomId: string,
+  newRoomId: string,
+  bookingStatus: Booking['status']
+): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.changeBookingRoom(bookingId, oldRoomId, newRoomId, bookingStatus);
+    return;
+  }
+
+  // 1. Delete old mapping
+  await supabase
+    .from('booking_rooms')
+    .delete()
+    .eq('booking_id', bookingId)
+    .eq('room_id', oldRoomId);
+
+  // 2. Insert new mapping
+  await supabase
+    .from('booking_rooms')
+    .insert([{ booking_id: bookingId, room_id: newRoomId }] as any);
+
+  // 3. Update room statuses if the booking is currently active
+  if (bookingStatus === 'checked-in') {
+    await updateRoomStatus(oldRoomId, 'cleaning', undefined);
+    await updateRoomStatus(newRoomId, 'occupied', bookingId);
+  }
+
+  // 4. Migrate roomGuests data if any exists for this room
+  const { data: bookingData } = await supabase
+    .from('bookings')
+    .select('room_guests')
+    .eq('id', bookingId)
+    .single();
+
+  if (bookingData && bookingData.room_guests) {
+    const roomGuests = bookingData.room_guests as Record<string, any>;
+    if (roomGuests[oldRoomId]) {
+      roomGuests[newRoomId] = roomGuests[oldRoomId];
+      delete roomGuests[oldRoomId];
+
+      await supabase
+        .from('bookings')
+        .update({ room_guests: roomGuests })
+        .eq('id', bookingId);
+    }
   }
 }
 
@@ -669,6 +748,8 @@ export async function addPayment(payment: Payment): Promise<void> {
     vat: payment.vat,
     total: payment.total,
     // Don't specify paid_by unless it's a valid UUID
+    ...(payment.deposit !== undefined && { deposit: payment.deposit }),
+    ...(payment.balanceDue !== undefined && { balance_due: payment.balanceDue }),
   } as any);
 
   if (error) {
@@ -748,8 +829,8 @@ export async function getNextReceiptNumber(): Promise<string> {
   // Use a date-specific counter ID for daily reset
   const { data, error } = await supabase.rpc('get_next_counter', { counter_id: `receipt_${dateStr}` });
 
-  if (error) {
-    console.error('Error getting receipt number:', error);
+  if (error || data === null || data === undefined) {
+    console.error('Error getting receipt number:', error || 'Returned null');
     return localStorage.getNextReceiptNumber();
   }
 
@@ -770,8 +851,8 @@ export async function getNextInvoiceNumber(): Promise<string> {
   // Use a date-specific counter ID for daily reset
   const { data, error } = await supabase.rpc('get_next_counter', { counter_id: `invoice_${dateStr}` });
 
-  if (error) {
-    console.error('Error getting invoice number:', error);
+  if (error || data === null || data === undefined) {
+    console.error('Error getting invoice number:', error || 'Returned null');
     return localStorage.getNextInvoiceNumber();
   }
 
