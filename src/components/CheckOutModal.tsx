@@ -188,51 +188,26 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
   const vat = useMemo(() => extractVAT(total), [total]);
   const subtotal = useMemo(() => extractBasePrice(total), [total]);
   const canApplyDiscount = currentUser.role === 'board' || currentUser.role === 'management';
-  const handlePayment = async () => {
-    // Removed blocking confirm dialog for better UX
-    setProcessing(true);
-    try {
-      const [receiptNumber, invoiceNumber] = await Promise.all([
-        api.getNextReceiptNumber(),
-        api.getNextInvoiceNumber(),
-      ]);
-
-      const payment: Payment = {
-        id: `PAY${Date.now()}`,
-        bookingId: booking.id,
-        amount: total,
-        method: paymentMethod,
-        receiptNumber,
-        invoiceNumber,
-        paidAt: new Date().toISOString(),
-        paidBy: currentUser.id,
-        charges,
-        subtotal,
-        vat,
-        total,
-      };
-
-      await api.addPayment(payment);
-
-      // Update booking to 'checked-in' (no-op) or just skip status update
-      // We don't set 'paid' status in DB because it might be restricted by ENUM
-      // The existence of a Payment record implies 'paid' status in the UI
-      /* 
-      await api.updateBooking(booking.id, {
-        actualCheckOutTime: checkOutTime, // Optional: verify if we should set this now or later
-      });
-      */
-
-      setReceipt(payment);
-      setShowReceipt(true);
-
-      // We don't close the modal yet, showing receipt first
-    } catch (err) {
-      console.error('Payment failed:', err);
-      alert('❌ ไม่สามารถบันทึกการชำระเงินได้');
-    } finally {
-      setProcessing(false);
-    }
+  const handlePayment = () => {
+    // Build a local preview only — no API calls yet.
+    // Receipt/invoice numbers and DB persistence happen in handleFinalizeCheckOut
+    // so that closing this modal without confirming checkout leaves no orphan records.
+    const previewPayment: Payment = {
+      id: `PAY${Date.now()}`,
+      bookingId: booking.id,
+      amount: total,
+      method: paymentMethod,
+      receiptNumber: '',
+      invoiceNumber: '',
+      paidAt: new Date().toISOString(),
+      paidBy: currentUser.id,
+      charges,
+      subtotal,
+      vat,
+      total,
+    };
+    setReceipt(previewPayment);
+    setShowReceipt(true);
   };
 
   const handleFinalizeCheckOut = async () => {
@@ -240,6 +215,24 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
 
     setProcessing(true);
     try {
+      // Generate receipt/invoice numbers and persist payment only when actually checking out.
+      // Skip this block if the booking was already paid (existingPayment prop supplied).
+      if (!existingPayment && receipt) {
+        const [receiptNumber, invoiceNumber] = await Promise.all([
+          api.getNextReceiptNumber(),
+          api.getNextInvoiceNumber(),
+        ]);
+
+        const finalPayment: Payment = {
+          ...receipt,
+          receiptNumber,
+          invoiceNumber,
+        };
+
+        await api.addPayment(finalPayment);
+        setReceipt(finalPayment);
+      }
+
       await api.updateBooking(booking.id, {
         status: 'checked-out',
         actualCheckOutTime: checkOutTime,
@@ -350,8 +343,8 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
                   <span className="text-xl font-bold text-slate-900 border-b-2 border-slate-900 pb-1">ใบกำกับภาษีและใบเสร็จรับเงิน</span>
                 </div>
                 <div className="text-right w-1/3 space-y-1">
-                  <div className="text-slate-800 font-bold text-lg font-mono">No. {receipt.receiptNumber}</div>
-                  <div className="text-slate-600 text-sm font-mono">Tax Inv. {receipt.invoiceNumber}</div>
+                  <div className="text-slate-800 font-bold text-lg font-mono">No. {receipt.receiptNumber || '(ออกเลขเมื่อยืนยัน)'}</div>
+                  <div className="text-slate-600 text-sm font-mono">Tax Inv. {receipt.invoiceNumber || '(ออกเลขเมื่อยืนยัน)'}</div>
                 </div>
               </div>
               <div className="flex justify-end">

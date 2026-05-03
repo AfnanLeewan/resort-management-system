@@ -683,7 +683,7 @@ export async function deletePayment(paymentId: string): Promise<void> {
     return;
   }
 
-  // First, get the payment to find its booking_id for deleting charges
+  // Get the payment to find its booking_id
   const { data: payment, error: fetchError } = await supabase
     .from('payments')
     .select('booking_id')
@@ -695,20 +695,7 @@ export async function deletePayment(paymentId: string): Promise<void> {
     throw fetchError;
   }
 
-  // Delete associated charges first
-  if (payment?.booking_id) {
-    const { error: chargesError } = await supabase
-      .from('charges')
-      .delete()
-      .eq('booking_id', payment.booking_id);
-
-    if (chargesError) {
-      console.error('Error deleting charges:', chargesError);
-      // Continue with payment deletion anyway
-    }
-  }
-
-  // Delete the payment
+  // Delete the payment record first
   const { error } = await supabase
     .from('payments')
     .delete()
@@ -717,6 +704,28 @@ export async function deletePayment(paymentId: string): Promise<void> {
   if (error) {
     console.error('Error deleting payment:', error);
     throw error;
+  }
+
+  // Only delete charges when no other payment exists for this booking.
+  // If multiple payment records share the same booking_id (e.g. legacy garbage records),
+  // deleting one payment must not remove charges that belong to a sibling payment.
+  if (payment?.booking_id) {
+    const { data: remaining } = await supabase
+      .from('payments')
+      .select('id')
+      .eq('booking_id', payment.booking_id)
+      .limit(1);
+
+    if (!remaining || remaining.length === 0) {
+      const { error: chargesError } = await supabase
+        .from('charges')
+        .delete()
+        .eq('booking_id', payment.booking_id);
+
+      if (chargesError) {
+        console.error('Error deleting charges:', chargesError);
+      }
+    }
   }
 }
 
