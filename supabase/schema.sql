@@ -20,7 +20,7 @@ CREATE TYPE user_status AS ENUM ('on-duty', 'off-duty', 'on-leave');
 CREATE TYPE booking_status AS ENUM ('reserved', 'checked-in', 'checked-out', 'cancelled');
 CREATE TYPE charge_type AS ENUM ('room', 'early-checkin', 'late-checkout', 'discount', 'other');
 CREATE TYPE maintenance_priority AS ENUM ('low', 'medium', 'high');
-CREATE TYPE maintenance_status AS ENUM ('pending', 'in-progress', 'resolved');
+CREATE TYPE maintenance_status AS ENUM ('pending', 'in-progress', 'completed', 'resolved');
 CREATE TYPE attendance_type AS ENUM ('check-in', 'check-out', 'leave');
 CREATE TYPE transaction_type AS ENUM ('in', 'out');
 

@@ -879,7 +879,11 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
             setSelectedRoomForMaintenance(null);
           }}
           currentUser={currentUser}
-          onUpdate={loadData}
+          onSuccess={() => {
+            loadData();
+            setShowMaintenanceModal(false);
+            setSelectedRoomForMaintenance(null);
+          }}
         />
       )}
 
