@@ -8,6 +8,7 @@ import { CheckInModal } from './CheckInModal';
 import { CheckOutModal } from './CheckOutModal';
 import { BookingDetailsModal } from './BookingDetailsModal';
 import { ReceiptModal } from './ReceiptModal';
+import { EditReceiptModal } from './EditReceiptModal';
 import { Calendar } from './ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { format, addDays } from 'date-fns';
@@ -34,6 +35,7 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
   const [showCheckOut, setShowCheckOut] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
+  const [showEditReceipt, setShowEditReceipt] = useState(false);
   
   // Month filter for bookings list
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -218,6 +220,20 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     setShowCheckOut(false);
     setSelectedBooking(null);
     await loadData();
+  };
+
+  const handleEditReceiptStart = () => {
+    setShowReceipt(false);
+    setShowEditReceipt(true);
+  };
+
+  const handleEditReceiptSave = async () => {
+    setShowEditReceipt(false);
+    await loadData();
+    // Re-open the receipt view with the updated payment
+    if (selectedBooking) {
+      await handleShowReceipt(selectedBooking);
+    }
   };
 
   const toggleRoomSelection = (roomId: string) => {
@@ -776,6 +792,22 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
           payment={selectedPayment}
           roomNumbers={labeledRooms.filter(r => selectedBooking.roomIds.includes(r.id)).map(r => r.label).join(', ')}
           onClose={() => setShowReceipt(false)}
+          currentUser={currentUser}
+          onEdit={handleEditReceiptStart}
+        />
+      )}
+
+      {showEditReceipt && selectedBooking && selectedPayment && (
+        <EditReceiptModal
+          booking={selectedBooking}
+          payment={selectedPayment}
+          roomNumbers={labeledRooms.filter(r => selectedBooking.roomIds.includes(r.id)).map(r => r.label).join(', ')}
+          currentUser={currentUser}
+          onClose={() => {
+            setShowEditReceipt(false);
+            setShowReceipt(true);
+          }}
+          onSave={handleEditReceiptSave}
         />
       )}
     </div>
