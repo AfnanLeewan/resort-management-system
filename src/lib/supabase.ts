@@ -3,6 +3,7 @@ import type { Database } from './database.types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseSchema = import.meta.env.VITE_SUPABASE_SCHEMA;
 const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
 
 // Check if Supabase is configured
@@ -10,7 +11,7 @@ export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey && supabas
 
 // Create Supabase client (with fallback for demo mode)
 export const supabase = isSupabaseConfigured
-  ? createClient<Database>(supabaseUrl, supabaseAnonKey)
+  ? createClient<Database>(supabaseUrl, supabaseAnonKey, supabaseSchema ? { db: { schema: supabaseSchema as any } } : undefined)
   : null;
 
 // Export demo mode flag
