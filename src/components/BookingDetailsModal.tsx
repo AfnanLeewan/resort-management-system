@@ -73,28 +73,20 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
   };
 
   const [additionalCharges, setAdditionalCharges] = useState<Charge[]>(booking.additionalCharges || []);
-  
+
   // New Charge Form
   const [newChargeDesc, setNewChargeDesc] = useState('');
   const [newChargeAmount, setNewChargeAmount] = useState('');
   const [selectedPreset, setSelectedPreset] = useState('other');
 
-   const [additionalCharges, setAdditionalCharges] = useState<Charge[]>(booking.additionalCharges || []);
+  // Room guests
+  const [roomGuests, setRoomGuests] = useState<Record<string, Partial<User>>>(booking.roomGuests || {});
 
-   // New Charge Form
-   const [newChargeDesc, setNewChargeDesc] = useState('');
-   const [newChargeAmount, setNewChargeAmount] = useState('');
-   const [selectedPreset, setSelectedPreset] = useState('other');
-
-   // Room guests
-   const [roomGuests, setRoomGuests] = useState<Record<string, Partial<User>>>(booking.roomGuests || {});
-
-   // Change room state
-   const [isChangingRoom, setIsChangingRoom] = useState(false);
-   const [changingRoomId, setChangingRoomId] = useState<string | null>(null);
-   const [availableRooms, setAvailableRooms] = useState<any[]>([]);
-   const [allRooms, setAllRooms] = useState<any[]>([]);
-   const [selectedNewRoomId, setSelectedNewRoomId] = useState('');
+  // Change room state
+  const [isChangingRoom, setIsChangingRoom] = useState(false);
+  const [changingRoomId, setChangingRoomId] = useState<string | null>(null);
+  const [availableRooms, setAvailableRooms] = useState<any[]>([]);
+  const [selectedNewRoomId, setSelectedNewRoomId] = useState('');
 
    const loadAvailableRooms = async () => {
       try {
@@ -559,6 +551,8 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
               </button>
             </div>
           )}
+
+            </div>
 
           {/* Danger Zone */}
           {booking.status === 'reserved' && (
