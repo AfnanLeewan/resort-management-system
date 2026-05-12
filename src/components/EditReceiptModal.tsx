@@ -17,12 +17,13 @@ interface EditReceiptModalProps {
 export function EditReceiptModal({ booking, payment, roomNumbers, currentUser, onClose, onSave }: EditReceiptModalProps) {
   const canApplyDiscount = currentUser.role === 'board' || currentUser.role === 'management';
 
-  const fixedCharges = payment.charges.filter(c =>
+  const allOriginalCharges: Charge[] = payment.charges ?? [];
+  const fixedCharges = allOriginalCharges.filter(c =>
     ['room', 'early-checkin', 'late-checkout'].includes(c.type)
   );
 
-  const existingDiscount = payment.charges.find(c => c.type === 'discount');
-  const existingEditableCharges = payment.charges.filter(c =>
+  const existingDiscount = allOriginalCharges.find(c => c.type === 'discount');
+  const existingEditableCharges = allOriginalCharges.filter(c =>
     !['room', 'early-checkin', 'late-checkout'].includes(c.type) && c.type !== 'discount'
   );
 
