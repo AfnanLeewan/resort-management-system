@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { Booking, Charge, User } from '../types';
+import { useState, useEffect, useMemo } from 'react';
+import { Booking, Charge, User, Room } from '../types';
 import * as api from '../utils/api';
-import { X, Save, Plus, Trash2, FileText, User as UserIcon, Phone, CreditCard, ShoppingBag, MapPin, Banknote, Loader2, ArrowRightLeft } from 'lucide-react';
+import { X, Save, Plus, Trash2, FileText, User as UserIcon, Phone, CreditCard, ShoppingBag, MapPin, Banknote, Loader2, MinusCircle } from 'lucide-react';
 import { formatCurrency } from '../utils/dateHelpers';
-import { formatRoomName } from '../utils/roomHelpers';
+import { calculateNights } from '../utils/pricing';
 
 interface BookingDetailsModalProps {
    booking: Booking;
@@ -13,13 +13,71 @@ interface BookingDetailsModalProps {
 }
 
 export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }: BookingDetailsModalProps) {
-   const [guestName, setGuestName] = useState(booking.guest.name);
-   const [phone, setPhone] = useState(booking.guest.phone);
-   const [idNumber, setIdNumber] = useState(booking.guest.idNumber);
-   const [address, setAddress] = useState(booking.guest.address || '');
-   const [deposit, setDeposit] = useState(booking.deposit?.toString() || '');
-   const [notes, setNotes] = useState(booking.notes || '');
-   const [saving, setSaving] = useState(false);
+  const [guestName, setGuestName] = useState(booking.guest.name);
+  const [phone, setPhone] = useState(booking.guest.phone);
+  const [idNumber, setIdNumber] = useState(booking.guest.idNumber);
+  const [address, setAddress] = useState(booking.guest.address || '');
+  const [deposit, setDeposit] = useState(booking.deposit?.toString() || '');
+  const [notes, setNotes] = useState(booking.notes || '');
+  const [saving, setSaving] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [allRooms, setAllRooms] = useState<Room[]>([]);
+  const [selectedRoomsToCancel, setSelectedRoomsToCancel] = useState<string[]>([]);
+
+  useEffect(() => {
+    api.getRooms().then(setAllRooms).catch(console.error);
+  }, []);
+
+  const labeledBookingRooms = useMemo(() => {
+    const sorted = [...allRooms].sort((a, b) => a.number - b.number);
+    const rc = sorted.slice(0, 10).map((r, i) => ({ ...r, label: `RC${String(i + 1).padStart(2, '0')}` }));
+    const rb = sorted.slice(10, 20).map((r, i) => ({ ...r, label: `RB${String(i + 1).padStart(2, '0')}` }));
+    const ra = sorted.slice(20, 30).map((r, i) => ({ ...r, label: `RA${String(i + 1).padStart(2, '0')}` }));
+    return [...rc, ...rb, ...ra].filter(r => booking.roomIds.includes(r.id));
+  }, [allRooms, booking.roomIds]);
+
+  const nights = calculateNights(booking.checkInDate, booking.checkOutDate);
+
+  const toggleRoomToCancel = (roomId: string) => {
+    setSelectedRoomsToCancel(prev =>
+      prev.includes(roomId) ? prev.filter(id => id !== roomId) : [...prev, roomId]
+    );
+  };
+
+  const handlePartialCancel = async () => {
+    if (selectedRoomsToCancel.length === 0) return;
+    if (selectedRoomsToCancel.length >= booking.roomIds.length) {
+      alert('ไม่สามารถยกเลิกห้องทั้งหมดได้ กรุณาใช้ปุ่มยกเลิกการจองแทน');
+      return;
+    }
+
+    const roomLabels = selectedRoomsToCancel
+      .map(id => labeledBookingRooms.find(r => r.id === id)?.label ?? id)
+      .join(', ');
+
+    if (!confirm(`คุณแน่ใจหรือไม่ที่จะยกเลิกห้อง ${roomLabels}?\nการกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
+
+    setCancelling(true);
+    try {
+      await api.partialCancelRooms(booking.id, selectedRoomsToCancel);
+      alert(`✅ ยกเลิกห้อง ${roomLabels} เรียบร้อยแล้ว`);
+      setSelectedRoomsToCancel([]);
+      onUpdate();
+      onClose();
+    } catch (err) {
+      console.error('Failed to partially cancel rooms:', err);
+      alert('❌ ไม่สามารถยกเลิกห้องพักได้');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const [additionalCharges, setAdditionalCharges] = useState<Charge[]>(booking.additionalCharges || []);
+  
+  // New Charge Form
+  const [newChargeDesc, setNewChargeDesc] = useState('');
+  const [newChargeAmount, setNewChargeAmount] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState('other');
 
    const [additionalCharges, setAdditionalCharges] = useState<Charge[]>(booking.additionalCharges || []);
 
@@ -434,32 +492,99 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
                   </button>
                </div>
 
-               {/* Danger Zone */}
-               {booking.status === 'reserved' && (
-                  <div className="pt-6 border-t border-slate-100 mt-2">
-                     <button
-                        onClick={async () => {
-                           if (confirm('คุณแน่ใจหรือไม่ที่จะยกเลิกการจองนี้? การกระทำนี้ไม่สามารถย้อนกลับได้')) {
-                              try {
-                                 await api.updateBooking(booking.id, { status: 'cancelled' });
-                                 alert('ยกเลิกการจองเรียบร้อยแล้ว');
-                                 onUpdate();
-                                 onClose();
-                              } catch (err) {
-                                 console.error('Failed to cancel booking:', err);
-                                 alert('❌ ไม่สามารถยกเลิกการจองได้');
-                              }
-                           }
-                        }}
-                        className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 border border-red-100"
-                     >
-                        <Trash2 className="w-5 h-5" />
-                        ยกเลิกการจอง (Cancel Booking)
-                     </button>
+          {/* Partial Room Cancellation */}
+          {booking.roomIds.length > 1 && (booking.status === 'reserved' || booking.status === 'checked-in') && (
+            <div className="pt-6 border-t border-slate-100 mt-2">
+              <h3 className="text-slate-800 font-bold mb-2 flex items-center gap-2">
+                <MinusCircle className="w-5 h-5 text-orange-500" />
+                ยกเลิกห้องพักบางส่วน (Partial Room Cancellation)
+              </h3>
+              <p className="text-sm text-slate-500 mb-4">เลือกห้องที่ต้องการยกเลิก — ต้องเหลืออย่างน้อย 1 ห้อง</p>
+
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 mb-4">
+                {labeledBookingRooms.map(room => {
+                  const isSelected = selectedRoomsToCancel.includes(room.id);
+                  return (
+                    <button
+                      key={room.id}
+                      onClick={() => toggleRoomToCancel(room.id)}
+                      className={`py-2 px-3 rounded-xl text-sm font-bold border transition-all ${
+                        isSelected
+                          ? 'bg-red-500 text-white border-red-600 shadow-md'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-red-300 hover:text-red-500'
+                      }`}
+                    >
+                      {room.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedRoomsToCancel.length > 0 && (
+                <div className="bg-orange-50 rounded-xl p-4 border border-orange-100 mb-4 text-sm">
+                  <div className="space-y-1 text-slate-600">
+                    <div className="flex justify-between">
+                      <span>ห้องเดิม</span>
+                      <span className="font-bold">{booking.roomIds.length} ห้อง</span>
+                    </div>
+                    <div className="flex justify-between text-red-600">
+                      <span>ยกเลิก</span>
+                      <span className="font-bold">−{selectedRoomsToCancel.length} ห้อง</span>
+                    </div>
+                    <div className="flex justify-between border-t border-orange-200 pt-1 font-bold text-slate-800">
+                      <span>คงเหลือ</span>
+                      <span>{booking.roomIds.length - selectedRoomsToCancel.length} ห้อง</span>
+                    </div>
                   </div>
-               )}
+                  <div className="mt-3 pt-3 border-t border-orange-200 space-y-1">
+                    <div className="flex justify-between text-slate-400">
+                      <span>ยอดเดิม ({booking.roomIds.length} ห้อง × {nights} คืน @ ฿{booking.baseRate})</span>
+                      <span className="line-through">{formatCurrency(booking.baseRate * nights * booking.roomIds.length)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-slate-800">
+                      <span>ยอดใหม่ ({booking.roomIds.length - selectedRoomsToCancel.length} ห้อง × {nights} คืน)</span>
+                      <span className="text-green-700">{formatCurrency(booking.baseRate * nights * (booking.roomIds.length - selectedRoomsToCancel.length))}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={handlePartialCancel}
+                disabled={selectedRoomsToCancel.length === 0 || cancelling}
+                className="w-full py-3 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-2xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 border border-orange-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <MinusCircle className="w-5 h-5" />}
+                ยกเลิก {selectedRoomsToCancel.length > 0 ? `${selectedRoomsToCancel.length} ห้องที่เลือก` : 'ห้องที่เลือก'}
+              </button>
             </div>
-         </div>
+          )}
+
+          {/* Danger Zone */}
+          {booking.status === 'reserved' && (
+             <div className="pt-6 border-t border-slate-100 mt-2">
+                <button
+                   onClick={async () => {
+                      if (confirm('คุณแน่ใจหรือไม่ที่จะยกเลิกการจองนี้? การกระทำนี้ไม่สามารถย้อนกลับได้')) {
+                         try {
+                            await api.updateBooking(booking.id, { status: 'cancelled' });
+                            alert('ยกเลิกการจองเรียบร้อยแล้ว');
+                            onUpdate();
+                            onClose();
+                         } catch (err) {
+                            console.error('Failed to cancel booking:', err);
+                            alert('❌ ไม่สามารถยกเลิกการจองได้');
+                         }
+                      }
+                   }}
+                   className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 border border-red-100"
+                >
+                   <Trash2 className="w-5 h-5" />
+                   ยกเลิกการจอง (Cancel Booking)
+                </button>
+             </div>
+          )}
+        </div>
       </div>
    );
 }
