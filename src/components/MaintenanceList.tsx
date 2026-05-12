@@ -327,6 +327,7 @@ export function MaintenanceList({ currentUser }: MaintenanceListProps) {
                 <option value="all">สถานะ: ทั้งหมด</option>
                 <option value="pending">รอรับเรื่อง</option>
                 <option value="in-progress">กำลังซ่อม</option>
+                <option value="completed">รอตรวจสอบ</option>
                 <option value="resolved">เสร็จสิ้น</option>
               </select>
               <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />

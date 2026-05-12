@@ -126,7 +126,7 @@ export function Reports({ currentUser }: ReportsProps) {
     window.print();
   };
 
-  const handleDeletePayment = async (paymentId: string, receiptNumber: string) => {
+  const handleDeletePayment = async (paymentId: string, bookingId: string, receiptNumber: string) => {
     if (!confirm(`คุณต้องการลบรายการ ${receiptNumber} หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
       return;
     }
@@ -134,8 +134,13 @@ export function Reports({ currentUser }: ReportsProps) {
     setDeleting(paymentId);
     try {
       await api.deletePayment(paymentId);
+      await api.deleteBooking(bookingId);
       // Refresh payments list
-      const updatedPayments = await api.getPayments();
+      const [updatedBookings, updatedPayments] = await Promise.all([
+        api.getBookings(),
+        api.getPayments(),
+      ]);
+      setBookings(updatedBookings);
       setPayments(updatedPayments);
 
       // Remove from selection if deleted
@@ -145,8 +150,8 @@ export function Reports({ currentUser }: ReportsProps) {
         setSelectedIds(newSelected);
       }
     } catch (err) {
-      console.error('Failed to delete payment:', err);
-      alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment');
+      console.error('Failed to delete payment/booking:', err);
+      alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment or booking');
     } finally {
       setDeleting(null);
     }
@@ -175,26 +180,42 @@ export function Reports({ currentUser }: ReportsProps) {
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
 
-    if (!confirm(`คุณต้องการลบรายการที่เลือก ${selectedIds.size} รายการ หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
+    if (!confirm(`คุณต้องการลบรายการที่เลือก ${selectedIds.size} รายการ หรือไม่?\n\nการดำเนินการนี้จะลบทั้งใบเสร็จและการจองที่เกี่ยวข้อง — ย้อนกลับไม่ได้`)) {
       return;
     }
 
+    // Collect bookingId per selected paymentId BEFORE deleting payments
+    const selectedPayments = payments.filter(p => selectedIds.has(p.id));
+    const bookingIds = Array.from(new Set(
+      selectedPayments.map(p => p.bookingId).filter((id): id is string => Boolean(id))
+    ));
+
     setIsDeletingMulti(true);
     try {
-      // Delete all selected payments in parallel
+      // 1) Delete payments first (FK constraint allows this)
       await Promise.all(Array.from(selectedIds).map(id => api.deletePayment(id)));
+      // 2) Delete linked bookings (also clears booking_rooms + charges via cascade)
+      await Promise.all(bookingIds.map(id => api.deleteBooking(id)));
 
-      // Refresh payments list
-      const updatedPayments = await api.getPayments();
+      // Refresh everything that depends on bookings/payments
+      const [updatedBookings, updatedPayments] = await Promise.all([
+        api.getBookings(),
+        api.getPayments(),
+      ]);
+      setBookings(updatedBookings);
       setPayments(updatedPayments);
 
       // Clear selection
       setSelectedIds(new Set());
     } catch (err) {
-      console.error('Failed to delete selected payments:', err);
+      console.error('Failed to delete selected payments/bookings:', err);
       alert('❌ เกิดข้อผิดพลาดในการลบรายการบางรายการ / Some payments could not be deleted');
       // Refresh anyway to show current state
-      const updatedPayments = await api.getPayments();
+      const [updatedBookings, updatedPayments] = await Promise.all([
+        api.getBookings(),
+        api.getPayments(),
+      ]);
+      setBookings(updatedBookings);
       setPayments(updatedPayments);
     } finally {
       setIsDeletingMulti(false);
@@ -445,7 +466,7 @@ export function Reports({ currentUser }: ReportsProps) {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
-                        onClick={() => handleDeletePayment(payment.id, payment.receiptNumber)}
+                        onClick={() => handleDeletePayment(payment.id, payment.bookingId, payment.receiptNumber)}
                         disabled={deleting === payment.id || isDeletingMulti}
                         className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
                         title="ลบรายการ"

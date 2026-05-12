@@ -130,16 +130,6 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
     if (booking.additionalCharges && booking.additionalCharges.length > 0) {
       chargeList.push(...booking.additionalCharges);
     }
-    // Deposit Deduction
-    if (booking.deposit && booking.deposit > 0) {
-      chargeList.push({
-        id: `charge-deposit`,
-        bookingId: booking.id,
-        type: 'other',
-        description: `หักเงินมัดจำ (Deposit)`,
-        amount: -booking.deposit,
-      });
-    }
     // Penalty (Adjustable)
     if (penalty > 0) {
       chargeList.push({
@@ -168,7 +158,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
       });
     });
     // Discount
-    if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management')) {
+    if (discount > 0 && (currentUser.role === 'board' || currentUser.role === 'management' || currentUser.role === 'front-desk')) {
       chargeList.push({
         id: `charge-discount`,
         bookingId: booking.id,
@@ -180,59 +170,37 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
     }
     return chargeList;
   }, [booking, rooms, checkOutTime, discount, discountReason, penalty, penaltyReason, currentUser, extraCharges]);
-  // Total is the sum of charges (Inclusive of VAT)
+  // Total is the sum of charges (Inclusive of VAT) — does NOT include deposit deduction
   const total = useMemo(() => {
     return charges.reduce((sum, charge) => sum + charge.amount, 0);
   }, [charges]);
-  // Extract VAT and Base Price from the Total
+  // Extract VAT and Base Price from the Total (gross, before deposit deduction)
   const vat = useMemo(() => extractVAT(total), [total]);
   const subtotal = useMemo(() => extractBasePrice(total), [total]);
+  // Deposit is tracked separately as advance payment, not as a charge
+  const depositAmount = (booking.deposit && booking.deposit > 0) ? booking.deposit : 0;
+  const balanceDue = total - depositAmount;
   const canApplyDiscount = currentUser.role === 'board' || currentUser.role === 'management';
-  const handlePayment = async () => {
-    // Removed blocking confirm dialog for better UX
-    setProcessing(true);
-    try {
-      const [receiptNumber, invoiceNumber] = await Promise.all([
-        api.getNextReceiptNumber(),
-        api.getNextInvoiceNumber(),
-      ]);
-
-      const payment: Payment = {
-        id: `PAY${Date.now()}`,
-        bookingId: booking.id,
-        amount: total,
-        method: paymentMethod,
-        receiptNumber,
-        invoiceNumber,
-        paidAt: new Date().toISOString(),
-        paidBy: currentUser.id,
-        charges,
-        subtotal,
-        vat,
-        total,
-      };
-
-      await api.addPayment(payment);
-
-      // Update booking to 'checked-in' (no-op) or just skip status update
-      // We don't set 'paid' status in DB because it might be restricted by ENUM
-      // The existence of a Payment record implies 'paid' status in the UI
-      /* 
-      await api.updateBooking(booking.id, {
-        actualCheckOutTime: checkOutTime, // Optional: verify if we should set this now or later
-      });
-      */
-
-      setReceipt(payment);
-      setShowReceipt(true);
-
-      // We don't close the modal yet, showing receipt first
-    } catch (err) {
-      console.error('Payment failed:', err);
-      alert('❌ ไม่สามารถบันทึกการชำระเงินได้');
-    } finally {
-      setProcessing(false);
-    }
+  const handlePayment = () => {
+    // Build a local preview only — no API calls yet.
+    // Receipt/invoice numbers and DB persistence happen in handleFinalizeCheckOut
+    // so that closing this modal without confirming checkout leaves no orphan records.
+    const previewPayment: Payment = {
+      id: `PAY${Date.now()}`,
+      bookingId: booking.id,
+      amount: total,
+      method: paymentMethod,
+      receiptNumber: '',
+      invoiceNumber: '',
+      paidAt: new Date().toISOString(),
+      paidBy: currentUser.id,
+      charges,
+      subtotal,
+      vat,
+      total,
+    };
+    setReceipt(previewPayment);
+    setShowReceipt(true);
   };
 
   const handleFinalizeCheckOut = async () => {
@@ -240,6 +208,24 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
 
     setProcessing(true);
     try {
+      // Generate receipt/invoice numbers and persist payment only when actually checking out.
+      // Skip this block if the booking was already paid (existingPayment prop supplied).
+      if (!existingPayment && receipt) {
+        const [receiptNumber, invoiceNumber] = await Promise.all([
+          api.getNextReceiptNumber(),
+          api.getNextInvoiceNumber(),
+        ]);
+
+        const finalPayment: Payment = {
+          ...receipt,
+          receiptNumber,
+          invoiceNumber,
+        };
+
+        await api.addPayment(finalPayment);
+        setReceipt(finalPayment);
+      }
+
       await api.updateBooking(booking.id, {
         status: 'checked-out',
         actualCheckOutTime: checkOutTime,
@@ -350,8 +336,8 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
                   <span className="text-xl font-bold text-slate-900 border-b-2 border-slate-900 pb-1">ใบกำกับภาษีและใบเสร็จรับเงิน</span>
                 </div>
                 <div className="text-right w-1/3 space-y-1">
-                  <div className="text-slate-800 font-bold text-lg font-mono">No. {receipt.receiptNumber}</div>
-                  <div className="text-slate-600 text-sm font-mono">Tax Inv. {receipt.invoiceNumber}</div>
+                  <div className="text-slate-800 font-bold text-lg font-mono">No. {receipt.receiptNumber || '(ออกเลขเมื่อยืนยัน)'}</div>
+                  <div className="text-slate-600 text-sm font-mono">Tax Inv. {receipt.invoiceNumber || '(ออกเลขเมื่อยืนยัน)'}</div>
                 </div>
               </div>
               <div className="flex justify-end">
@@ -422,6 +408,18 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
                     <td className="px-4 py-4 text-right text-slate-800 font-bold">ยอดรวมทั้งสิ้น</td>
                     <td className="px-4 py-4 text-right text-orange-600 font-bold text-xl font-mono">{formatCurrency(receipt.total)}</td>
                   </tr>
+                  {receipt.deposit && receipt.deposit > 0 && (
+                    <>
+                      <tr className="border-t border-slate-100">
+                        <td className="px-4 py-3 text-right text-slate-500 text-sm">ชำระล่วงหน้าแล้ว (Advance Payment / Deposit)</td>
+                        <td className="px-4 py-3 text-right text-green-600 font-mono">-{formatCurrency(receipt.deposit)}</td>
+                      </tr>
+                      <tr className="bg-blue-50">
+                        <td className="px-4 py-4 text-right text-blue-800 font-bold">ยอดคงเหลือที่ต้องชำระ (Balance Due)</td>
+                        <td className="px-4 py-4 text-right text-blue-600 font-bold text-xl font-mono">{formatCurrency(receipt.balanceDue ?? 0)}</td>
+                      </tr>
+                    </>
+                  )}
                 </tfoot>
               </table>
             </div>
@@ -552,13 +550,25 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
                     <td className="py-3 text-slate-800 text-right font-mono pt-4">{formatCurrency(subtotal)}</td>
                   </tr>
                   <tr>
-                    <td className="py-3 text-slate-500 text-right text-sm">VAT 7% (รวม��นราคาแล้ว)</td>
+                    <td className="py-3 text-slate-500 text-right text-sm">VAT 7% (รวมในราคาแล้ว)</td>
                     <td className="py-3 text-slate-800 text-right font-mono">{formatCurrency(vat)}</td>
                   </tr>
                   <tr className="border-t border-slate-100">
-                    <td className="py-4 text-slate-800 text-right font-bold text-lg">ยอดรวมสุทธิ</td>
+                    <td className="py-4 text-slate-800 text-right font-bold text-lg">ยอดรวมทั้งสิ้น</td>
                     <td className="py-4 text-orange-600 text-right font-bold text-2xl font-mono">{formatCurrency(total)}</td>
                   </tr>
+                  {depositAmount > 0 && (
+                    <>
+                      <tr className="border-t border-slate-100">
+                        <td className="py-3 text-slate-500 text-right text-sm">ชำระล่วงหน้าแล้ว (Advance Payment / Deposit)</td>
+                        <td className="py-3 text-green-600 text-right font-mono">-{formatCurrency(depositAmount)}</td>
+                      </tr>
+                      <tr className="bg-blue-50">
+                        <td className="py-4 text-blue-800 text-right font-bold text-lg">ยอดคงเหลือที่ต้องชำระ (Balance Due)</td>
+                        <td className="py-4 text-blue-600 text-right font-bold text-2xl font-mono">{formatCurrency(balanceDue)}</td>
+                      </tr>
+                    </>
+                  )}
                 </tfoot>
               </table>
             </div>
@@ -776,7 +786,7 @@ export function CheckOutModal({ booking, onClose, onComplete, currentUser, exist
                 ) : (
                   <>
                     <CreditCard className="w-6 h-6" />
-                    รับชำระเงิน {formatCurrency(total)}
+                    รับชำระเงิน {formatCurrency(depositAmount > 0 ? balanceDue : total)}
                   </>
                 )}
               </button>
