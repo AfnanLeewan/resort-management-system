@@ -1,6 +1,6 @@
-import { Payment, Booking } from '../types';
+import { Payment, Booking, User } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/dateHelpers';
-import { Printer, User as UserIcon, FileText, Banknote, Building, Smartphone } from 'lucide-react';
+import { Printer, User as UserIcon, FileText, Banknote, Building, Smartphone, Pencil } from 'lucide-react';
 import logo from "../assets/Royyan_logo.JPG";
 
 interface ReceiptModalProps {
@@ -8,9 +8,13 @@ interface ReceiptModalProps {
   payment: Payment;
   roomNumbers: string;
   onClose: () => void;
+  currentUser?: User;
+  onEdit?: () => void;
 }
 
-export function ReceiptModal({ booking, payment, roomNumbers, onClose }: ReceiptModalProps) {
+export function ReceiptModal({ booking, payment, roomNumbers, onClose, currentUser, onEdit }: ReceiptModalProps) {
+  const canEdit = onEdit && currentUser && (currentUser.role === 'management' || currentUser.role === 'board');
+
   const handlePrintReceipt = () => {
     window.print();
   };
@@ -24,6 +28,16 @@ export function ReceiptModal({ booking, payment, roomNumbers, onClose }: Receipt
             <p className="text-slate-500 text-sm">Receipt & Tax Invoice</p>
           </div>
           <div className="flex gap-3">
+            {canEdit && (
+              <button
+                onClick={onEdit}
+                className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl transition-colors font-bold shadow-lg shadow-amber-200"
+                title="แก้ไขใบเสร็จ (สำหรับผู้มีสิทธิ์)"
+              >
+                <Pencil className="w-5 h-5" />
+                <span>แก้ไขใบเสร็จ</span>
+              </button>
+            )}
             <button
               onClick={handlePrintReceipt}
               className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl transition-colors font-bold shadow-lg shadow-slate-200"
