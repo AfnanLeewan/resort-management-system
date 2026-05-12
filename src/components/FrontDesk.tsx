@@ -9,6 +9,7 @@ import { CheckOutModal } from './CheckOutModal';
 import { BookingDetailsModal } from './BookingDetailsModal';
 import { ReceiptModal } from './ReceiptModal';
 import { EditReceiptModal } from './EditReceiptModal';
+import { LatePaymentModal } from './LatePaymentModal';
 import { Calendar } from './ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { format, addDays } from 'date-fns';
@@ -36,6 +37,7 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [showEditReceipt, setShowEditReceipt] = useState(false);
+  const [showLatePayment, setShowLatePayment] = useState(false);
   
   // Month filter for bookings list
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
