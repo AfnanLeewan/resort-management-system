@@ -74,6 +74,7 @@ function mapBookingFromDB(row: any, roomIds: string[] = []): Booking {
     status: row.status,
     groupName: row.group_name || undefined,
     notes: row.notes || undefined,
+    roomGuests: row.room_guests || undefined,
     createdAt: row.created_at,
     createdBy: row.created_by || '',
   };
@@ -93,6 +94,8 @@ function mapPaymentFromDB(row: any, charges: Charge[] = []): Payment {
     subtotal: Number(row.subtotal),
     vat: Number(row.vat),
     total: Number(row.total),
+    ...(row.deposit != null && { deposit: Number(row.deposit) }),
+    ...(row.balance_due != null && { balanceDue: Number(row.balance_due) }),
   };
 }
 
@@ -444,6 +447,7 @@ export async function addBooking(booking: Booking): Promise<string> {
     status: booking.status,
     group_name: booking.groupName || null,
     notes: booking.notes || null,
+    room_guests: booking.roomGuests || null,
     // created_by omitted - would need valid UUID from users table
   }).select('id').single();
 
@@ -530,6 +534,7 @@ export async function updateBooking(
   if (updates.status !== undefined) dbUpdates.status = updates.status;
   if (updates.groupName !== undefined) dbUpdates.group_name = updates.groupName;
   if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+  if (updates.roomGuests !== undefined) dbUpdates.room_guests = updates.roomGuests;
 
   const { error } = await supabase
     .from('bookings')
@@ -539,6 +544,31 @@ export async function updateBooking(
   if (error) {
     console.error('Error updating booking:', error);
     throw error;
+  }
+}
+
+export async function partialCancelRooms(
+  bookingId: string,
+  roomIdsToCancel: string[],
+): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.partialCancelRooms(bookingId, roomIdsToCancel);
+    return;
+  }
+
+  const { error: brError } = await supabase
+    .from('booking_rooms')
+    .delete()
+    .eq('booking_id', bookingId)
+    .in('room_id', roomIdsToCancel);
+
+  if (brError) {
+    console.error('Error removing booking rooms:', brError);
+    throw brError;
+  }
+
+  for (const roomId of roomIdsToCancel) {
+    await updateRoomStatus(roomId, 'available', undefined);
   }
 }
 
@@ -669,6 +699,8 @@ export async function addPayment(payment: Payment): Promise<void> {
     vat: payment.vat,
     total: payment.total,
     // Don't specify paid_by unless it's a valid UUID
+    ...(payment.deposit !== undefined && { deposit: payment.deposit }),
+    ...(payment.balanceDue !== undefined && { balance_due: payment.balanceDue }),
   } as any);
 
   if (error) {
@@ -683,7 +715,7 @@ export async function deletePayment(paymentId: string): Promise<void> {
     return;
   }
 
-  // First, get the payment to find its booking_id for deleting charges
+  // Get the payment to find its booking_id
   const { data: payment, error: fetchError } = await supabase
     .from('payments')
     .select('booking_id')
@@ -695,20 +727,7 @@ export async function deletePayment(paymentId: string): Promise<void> {
     throw fetchError;
   }
 
-  // Delete associated charges first
-  if (payment?.booking_id) {
-    const { error: chargesError } = await supabase
-      .from('charges')
-      .delete()
-      .eq('booking_id', payment.booking_id);
-
-    if (chargesError) {
-      console.error('Error deleting charges:', chargesError);
-      // Continue with payment deletion anyway
-    }
-  }
-
-  // Delete the payment
+  // Delete the payment record first
   const { error } = await supabase
     .from('payments')
     .delete()
@@ -717,6 +736,28 @@ export async function deletePayment(paymentId: string): Promise<void> {
   if (error) {
     console.error('Error deleting payment:', error);
     throw error;
+  }
+
+  // Only delete charges when no other payment exists for this booking.
+  // If multiple payment records share the same booking_id (e.g. legacy garbage records),
+  // deleting one payment must not remove charges that belong to a sibling payment.
+  if (payment?.booking_id) {
+    const { data: remaining } = await supabase
+      .from('payments')
+      .select('id')
+      .eq('booking_id', payment.booking_id)
+      .limit(1);
+
+    if (!remaining || remaining.length === 0) {
+      const { error: chargesError } = await supabase
+        .from('charges')
+        .delete()
+        .eq('booking_id', payment.booking_id);
+
+      if (chargesError) {
+        console.error('Error deleting charges:', chargesError);
+      }
+    }
   }
 }
 
@@ -739,8 +780,8 @@ export async function getNextReceiptNumber(): Promise<string> {
   // Use a date-specific counter ID for daily reset
   const { data, error } = await supabase.rpc('get_next_counter', { counter_id: `receipt_${dateStr}` });
 
-  if (error) {
-    console.error('Error getting receipt number:', error);
+  if (error || data === null || data === undefined) {
+    console.error('Error getting receipt number:', error || 'Returned null');
     return localStorage.getNextReceiptNumber();
   }
 
@@ -761,8 +802,8 @@ export async function getNextInvoiceNumber(): Promise<string> {
   // Use a date-specific counter ID for daily reset
   const { data, error } = await supabase.rpc('get_next_counter', { counter_id: `invoice_${dateStr}` });
 
-  if (error) {
-    console.error('Error getting invoice number:', error);
+  if (error || data === null || data === undefined) {
+    console.error('Error getting invoice number:', error || 'Returned null');
     return localStorage.getNextInvoiceNumber();
   }
 

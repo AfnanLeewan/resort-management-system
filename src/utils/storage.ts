@@ -196,6 +196,27 @@ export function updateBooking(
   }
 }
 
+export function partialCancelRooms(
+  bookingId: string,
+  roomIdsToCancel: string[],
+): void {
+  const bookings = getBookings();
+  const index = bookings.findIndex((b) => b.id === bookingId);
+  if (index === -1) return;
+
+  const booking = bookings[index];
+  const remainingRoomIds = booking.roomIds.filter(
+    (id) => !roomIdsToCancel.includes(id),
+  );
+
+  bookings[index] = { ...booking, roomIds: remainingRoomIds };
+  saveBookings(bookings);
+
+  roomIdsToCancel.forEach((roomId) => {
+    updateRoomStatus(roomId, 'available', undefined);
+  });
+}
+
 // Payment operations
 export function getPayments(): Payment[] {
   return loadFromStorage<Payment[]>(STORAGE_KEYS.PAYMENTS, []);

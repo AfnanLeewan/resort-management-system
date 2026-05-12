@@ -155,6 +155,18 @@ export function ReceiptModal({ booking, payment, roomNumbers, onClose, currentUs
                   <td className="px-4 py-4 text-right text-slate-800 font-bold">ยอดรวมทั้งสิ้น</td>
                   <td className="px-4 py-4 text-right text-orange-600 font-bold text-xl font-mono">{formatCurrency(payment.total)}</td>
                 </tr>
+                {payment.deposit && payment.deposit > 0 && (
+                  <>
+                    <tr className="border-t border-slate-100">
+                      <td className="px-4 py-3 text-right text-slate-500 text-sm">ชำระล่วงหน้าแล้ว (Advance Payment / Deposit)</td>
+                      <td className="px-4 py-3 text-right text-green-600 font-mono">-{formatCurrency(payment.deposit)}</td>
+                    </tr>
+                    <tr className="bg-blue-50">
+                      <td className="px-4 py-4 text-right text-blue-800 font-bold">ยอดคงเหลือที่ต้องชำระ (Balance Due)</td>
+                      <td className="px-4 py-4 text-right text-blue-600 font-bold text-xl font-mono">{formatCurrency(payment.balanceDue ?? 0)}</td>
+                    </tr>
+                  </>
+                )}
               </tfoot>
             </table>
           </div>
