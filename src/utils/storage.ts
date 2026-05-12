@@ -196,44 +196,25 @@ export function updateBooking(
   }
 }
 
-export function deleteBooking(bookingId: string): void {
-  const bookings = getBookings();
-  const newBookings = bookings.filter((b) => b.id !== bookingId);
-  saveBookings(newBookings);
-}
-
-export function changeBookingRoom(
+export function partialCancelRooms(
   bookingId: string,
-  oldRoomId: string,
-  newRoomId: string,
-  bookingStatus: Booking['status']
+  roomIdsToCancel: string[],
 ): void {
   const bookings = getBookings();
   const index = bookings.findIndex((b) => b.id === bookingId);
+  if (index === -1) return;
 
-  if (index !== -1) {
-    const booking = bookings[index];
+  const booking = bookings[index];
+  const remainingRoomIds = booking.roomIds.filter(
+    (id) => !roomIdsToCancel.includes(id),
+  );
 
-    // Update roomIds array
-    booking.roomIds = booking.roomIds.filter(id => id !== oldRoomId);
-    if (!booking.roomIds.includes(newRoomId)) {
-      booking.roomIds.push(newRoomId);
-    }
+  bookings[index] = { ...booking, roomIds: remainingRoomIds };
+  saveBookings(bookings);
 
-    // Migrate roomGuests data if it exists
-    if (booking.roomGuests && booking.roomGuests[oldRoomId]) {
-      booking.roomGuests[newRoomId] = booking.roomGuests[oldRoomId];
-      delete booking.roomGuests[oldRoomId];
-    }
-
-    saveBookings(bookings);
-
-    // Update Room statuses
-    if (bookingStatus === 'checked-in') {
-      updateRoomStatus(oldRoomId, 'cleaning', undefined);
-      updateRoomStatus(newRoomId, 'occupied', bookingId);
-    }
-  }
+  roomIdsToCancel.forEach((roomId) => {
+    updateRoomStatus(roomId, 'available', undefined);
+  });
 }
 
 // Payment operations
