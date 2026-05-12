@@ -8,6 +8,7 @@ import { CheckInModal } from './CheckInModal';
 import { CheckOutModal } from './CheckOutModal';
 import { BookingDetailsModal } from './BookingDetailsModal';
 import { ReceiptModal } from './ReceiptModal';
+import { LatePaymentModal } from './LatePaymentModal';
 import { Calendar } from './ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { format, addDays } from 'date-fns';
@@ -34,6 +35,7 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
   const [showCheckOut, setShowCheckOut] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
+  const [showLatePayment, setShowLatePayment] = useState(false);
   
   // Month filter for bookings list
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -189,6 +191,17 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     setShowDetails(true);
   };
 
+  const handleLatePayment = (booking: Booking) => {
+    setSelectedBooking(booking);
+    setShowLatePayment(true);
+  };
+
+  const handleLatePaymentComplete = async () => {
+    setShowLatePayment(false);
+    setSelectedBooking(null);
+    await loadData();
+  };
+
   const handleShowReceipt = async (booking: Booking) => {
     try {
       setLoading(true);
@@ -231,13 +244,13 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
     });
   };
 
-  const getStatusBadge = (booking: Booking) => {
-    const isPaid = payments.some(p => p.bookingId === booking.id);
-    
+  const getStatusBadge = (bk: Booking) => {
+    const isPaid = payments.some(p => p.bookingId === bk.id);
+
     let label = '';
     let style = '';
 
-    switch (booking.status) {
+    switch (bk.status) {
         case 'reserved':
             label = 'จองล่วงหน้า';
             style = 'bg-blue-50 text-blue-700 border-blue-200';
@@ -252,8 +265,13 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
             }
             break;
         case 'checked-out':
-            label = 'เช็คเอาท์แล้ว';
-            style = 'bg-slate-100 text-slate-600 border-slate-200';
+            if (!isPaid) {
+                label = 'ค้างชำระ';
+                style = 'bg-red-50 text-red-700 border-red-200';
+            } else {
+                label = 'เช็คเอาท์แล้ว';
+                style = 'bg-slate-100 text-slate-600 border-slate-200';
+            }
             break;
         case 'cancelled':
             label = 'ยกเลิก';
@@ -705,27 +723,42 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
                             เช็คเอาท์
                           </button>
                         )}
-                        {booking.status === 'checked-out' && (
-                           <span className="px-3 py-1 bg-slate-100 text-slate-400 rounded-lg text-xs font-bold">
+                        {booking.status === 'checked-out' && (() => {
+                          const isPaid = payments.some(p => p.bookingId === booking.id);
+                          return isPaid ? (
+                            <span className="px-3 py-1 bg-slate-100 text-slate-400 rounded-lg text-xs font-bold">
                               เสร็จสิ้น
-                           </span>
-                        )}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleLatePayment(booking)}
+                              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl transition-colors text-sm font-bold shadow-sm"
+                            >
+                              ชำระเงินย้อนหลัง
+                            </button>
+                          );
+                        })()}
 
                         {/* Details Button - For non-pool items mostly, but why not all? */}
-                        {!isPool && (
+                        {!isPool && (() => {
+                          const isCheckedOutPaid = booking.status === 'checked-out' && payments.some(p => p.bookingId === booking.id);
+                          const isCheckedOutUnpaid = booking.status === 'checked-out' && !payments.some(p => p.bookingId === booking.id);
+                          if (isCheckedOutUnpaid) return null;
+                          return (
                             <button
-                                onClick={() => booking.status === 'checked-out' ? handleShowReceipt(booking) : handleShowDetails(booking)}
+                                onClick={() => isCheckedOutPaid ? handleShowReceipt(booking) : handleShowDetails(booking)}
                                 className={cn(
                                   "p-2 rounded-xl transition-colors",
-                                  booking.status === 'checked-out' 
-                                    ? "hover:bg-green-50 text-slate-400 hover:text-green-600" 
+                                  isCheckedOutPaid
+                                    ? "hover:bg-green-50 text-slate-400 hover:text-green-600"
                                     : "hover:bg-slate-100 text-slate-400 hover:text-orange-500"
                                 )}
-                                title={booking.status === 'checked-out' ? "ดูใบเสร็จ / View Receipt" : "รายละเอียด / แก้ไข"}
+                                title={isCheckedOutPaid ? "ดูใบเสร็จ / View Receipt" : "รายละเอียด / แก้ไข"}
                             >
-                                <FileText className={cn("w-5 h-5", booking.status === 'checked-out' && "text-slate-500")} />
+                                <FileText className={cn("w-5 h-5", isCheckedOutPaid && "text-slate-500")} />
                             </button>
-                        )}
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>
@@ -776,6 +809,15 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
           payment={selectedPayment}
           roomNumbers={labeledRooms.filter(r => selectedBooking.roomIds.includes(r.id)).map(r => r.label).join(', ')}
           onClose={() => setShowReceipt(false)}
+        />
+      )}
+
+      {showLatePayment && selectedBooking && (
+        <LatePaymentModal
+          booking={selectedBooking}
+          onClose={() => { setShowLatePayment(false); setSelectedBooking(null); }}
+          onComplete={handleLatePaymentComplete}
+          currentUser={currentUser}
         />
       )}
     </div>
