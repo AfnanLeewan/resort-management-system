@@ -18,21 +18,20 @@ npx playwright test login      # Run a single test file
 
 ## Docker — Multi-Environment
 
-Two environments run as separate containers simultaneously:
+Two environments run as separate containers simultaneously. Use the wrapper scripts; they pass the right `-p` project name and env file:
 
 ```bash
-# UAT (port 8080)
-docker-compose -p resort-uat -f docker-compose.yml -f docker-compose.uat.yml --env-file .env.uat up -d --build
-
-# Production (port 80)
-docker-compose -p resort-prd -f docker-compose.yml -f docker-compose.prd.yml --env-file .env.prd up -d --build
+./deploy-prd.sh   # PRD on host port 8080  (container resort-management-prd)
+./deploy-uat.sh   # UAT on host port 3000  (container resort-management-uat)
 
 # Stop individually
-docker-compose -p resort-uat down
-docker-compose -p resort-prd down
+docker compose -p resort-prd down
+docker compose -p resort-uat down
 ```
 
-Env files: `.env.uat` (port 8080), `.env.prd` (port 80). `VITE_*` vars are baked into the JS bundle at build time — each environment requires its own `docker build`.
+Env files: `.env.prd` (port 8080) and `.env.uat` (port 3000). `VITE_*` vars are baked into the JS bundle at build time — each environment requires its own `docker build`.
+
+The deployed containers are fronted by Cloudflare Tunnel `home-server` on `afnan-home`: PRD → `resort-prd.afnanleewan.com`, UAT → `resort-uat.afnanleewan.com`.
 
 ## Environment Variables
 
