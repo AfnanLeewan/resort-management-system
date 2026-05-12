@@ -572,6 +572,79 @@ export async function partialCancelRooms(
   }
 }
 
+export async function deleteBooking(bookingId: string): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.deleteBooking(bookingId);
+    return;
+  }
+
+  // Delete booking_rooms first due to foreign key constraints if any exist
+  await supabase
+    .from('booking_rooms')
+    .delete()
+    .eq('booking_id', bookingId);
+
+  // Delete the booking itself
+  const { error } = await supabase
+    .from('bookings')
+    .delete()
+    .eq('id', bookingId);
+
+  if (error) {
+    console.error('Error deleting booking:', error);
+    throw error;
+  }
+}
+
+export async function changeBookingRoom(
+  bookingId: string,
+  oldRoomId: string,
+  newRoomId: string,
+  bookingStatus: Booking['status']
+): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.changeBookingRoom(bookingId, oldRoomId, newRoomId, bookingStatus);
+    return;
+  }
+
+  // 1. Delete old mapping
+  await supabase
+    .from('booking_rooms')
+    .delete()
+    .eq('booking_id', bookingId)
+    .eq('room_id', oldRoomId);
+
+  // 2. Insert new mapping
+  await supabase
+    .from('booking_rooms')
+    .insert([{ booking_id: bookingId, room_id: newRoomId }] as any);
+
+  // 3. Update room statuses if the booking is currently active
+  if (bookingStatus === 'checked-in') {
+    await updateRoomStatus(oldRoomId, 'cleaning', undefined);
+    await updateRoomStatus(newRoomId, 'occupied', bookingId);
+  }
+
+  // 4. Migrate roomGuests data if any exists for this room
+  const { data: bookingData } = await supabase
+    .from('bookings')
+    .select('room_guests')
+    .eq('id', bookingId)
+    .single();
+
+  if (bookingData && bookingData.room_guests) {
+    const roomGuests = bookingData.room_guests as Record<string, any>;
+    if (roomGuests[oldRoomId]) {
+      roomGuests[newRoomId] = roomGuests[oldRoomId];
+      delete roomGuests[oldRoomId];
+      await supabase
+        .from('bookings')
+        .update({ room_guests: roomGuests })
+        .eq('id', bookingId);
+    }
+  }
+}
+
 // =====================================================
 // PAYMENTS API
 // =====================================================
