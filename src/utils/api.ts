@@ -542,6 +542,31 @@ export async function updateBooking(
   }
 }
 
+export async function partialCancelRooms(
+  bookingId: string,
+  roomIdsToCancel: string[],
+): Promise<void> {
+  if (isInDemoMode || !supabase) {
+    localStorage.partialCancelRooms(bookingId, roomIdsToCancel);
+    return;
+  }
+
+  const { error: brError } = await supabase
+    .from('booking_rooms')
+    .delete()
+    .eq('booking_id', bookingId)
+    .in('room_id', roomIdsToCancel);
+
+  if (brError) {
+    console.error('Error removing booking rooms:', brError);
+    throw brError;
+  }
+
+  for (const roomId of roomIdsToCancel) {
+    await updateRoomStatus(roomId, 'available', undefined);
+  }
+}
+
 // =====================================================
 // PAYMENTS API
 // =====================================================
