@@ -82,7 +82,7 @@ export function Reports({ currentUser }: ReportsProps) {
 
     // Room nights sold
     const roomNights = monthPayments.reduce((sum, p) => {
-      const roomCharges = p.charges.filter(c => c.type === 'room');
+      const roomCharges = (p.charges ?? []).filter(c => c.type === 'room');
       return sum + roomCharges.length;
     }, 0);
 
