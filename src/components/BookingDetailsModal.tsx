@@ -46,17 +46,24 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
   };
 
   const handleCancelSingleRoom = async (roomId: string) => {
-    if (booking.roomIds.length <= 1) {
-      alert('นี่เป็นห้องสุดท้ายของการจอง — ใช้ปุ่ม "ยกเลิกการจอง" แทน');
-      return;
-    }
     const label = labeledBookingRooms.find(r => r.id === roomId)?.label ?? `ห้อง ${roomId}`;
-    if (!confirm(`ยกเลิกเฉพาะ ${label}? การกระทำนี้ย้อนกลับไม่ได้`)) return;
+    const isLastRoom = booking.roomIds.length <= 1;
+    const confirmMsg = isLastRoom
+      ? `ยกเลิก ${label}? เป็นห้องเดียวของการจองนี้ → การจองจะถูกยกเลิกทั้งหมด`
+      : `ยกเลิกเฉพาะ ${label}? การกระทำนี้ย้อนกลับไม่ได้`;
+    if (!confirm(confirmMsg)) return;
 
     setCancelling(true);
     try {
+      // Free up the room mapping + reset room status (same path either way)
       await api.partialCancelRooms(booking.id, [roomId]);
-      alert(`✅ ยกเลิก ${label} เรียบร้อย`);
+      // If that was the last room in the booking, also flip the booking itself to cancelled
+      if (isLastRoom) {
+        await api.updateBooking(booking.id, { status: 'cancelled' });
+      }
+      alert(isLastRoom
+        ? `✅ ยกเลิกการจอง (${label}) เรียบร้อย`
+        : `✅ ยกเลิก ${label} เรียบร้อย`);
       setSelectedRoomsToCancel(prev => prev.filter(id => id !== roomId));
       onUpdate();
       onClose();
@@ -346,23 +353,22 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
                                        เปลี่ยนห้อง
                                     </button>
                                     {(() => {
-                                       const canCancelPartial = booking.status === 'reserved' || booking.status === 'checked-in';
+                                       const canCancel = booking.status === 'reserved' || booking.status === 'checked-in';
                                        const isLastRoom = booking.roomIds.length <= 1;
-                                       const disabledHint = !canCancelPartial
+                                       const tip = !canCancel
                                           ? 'การจองนี้ผ่านการ check-out/ยกเลิกไปแล้ว'
                                           : isLastRoom
-                                             ? 'เหลือห้องสุดท้าย — ใช้ปุ่ม "ยกเลิกการจอง" ด้านล่าง'
-                                             : '';
-                                       const isDisabled = !canCancelPartial || isLastRoom || cancelling;
+                                             ? 'ยกเลิกห้องนี้ = ยกเลิกการจองทั้งหมด (เป็นห้องเดียว)'
+                                             : 'ยกเลิกเฉพาะห้องนี้';
                                        return (
                                           <button
                                              onClick={() => handleCancelSingleRoom(roomId)}
-                                             disabled={isDisabled}
-                                             title={disabledHint || 'ยกเลิกเฉพาะห้องนี้ (เหลือห้องอื่นในการจองนี้)'}
+                                             disabled={!canCancel || cancelling}
+                                             title={tip}
                                              className="flex items-center gap-1 text-sm font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                           >
                                              <MinusCircle className="w-4 h-4" />
-                                             ยกเลิกห้องนี้
+                                             {isLastRoom ? 'ยกเลิกการจอง' : 'ยกเลิกห้องนี้'}
                                           </button>
                                        );
                                     })()}
