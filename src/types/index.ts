@@ -67,6 +67,7 @@ export interface Payment {
   total: number;
   deposit?: number;    // Advance payment collected at booking time
   balanceDue?: number; // Amount to collect at checkout (total - deposit)
+  notes?: string;      // Free-form audit note (e.g. edit reason, late-payment context)
 }
 
 export interface MaintenanceReport {
