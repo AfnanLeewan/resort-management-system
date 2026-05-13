@@ -771,6 +771,9 @@ export async function addPayment(payment: Payment): Promise<void> {
     subtotal: payment.subtotal,
     vat: payment.vat,
     total: payment.total,
+    // Preserve caller-supplied paid_at so retroactive / edited receipts keep their date.
+    // (Postgres default would otherwise overwrite with NOW().)
+    ...(payment.paidAt && { paid_at: payment.paidAt }),
     // Don't specify paid_by unless it's a valid UUID
     ...(payment.deposit !== undefined && { deposit: payment.deposit }),
     ...(payment.balanceDue !== undefined && { balance_due: payment.balanceDue }),
