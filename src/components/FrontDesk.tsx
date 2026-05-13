@@ -724,12 +724,21 @@ export function FrontDesk({ currentUser }: FrontDeskProps) {
                     <td className="px-6 py-4">
                       <div className="flex gap-2 items-center">
                         {booking.status === 'reserved' && (
-                          <button
-                            onClick={() => handleCheckIn(booking)}
-                            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl transition-colors text-sm font-bold shadow-sm"
-                          >
-                            เช็คอิน
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleShowDetails(booking)}
+                              className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl transition-colors text-sm font-bold"
+                              title="แก้ไข / เปลี่ยนห้อง / ลดจำนวนห้อง"
+                            >
+                              แก้ไข
+                            </button>
+                            <button
+                              onClick={() => handleCheckIn(booking)}
+                              className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl transition-colors text-sm font-bold shadow-sm"
+                            >
+                              เช็คอิน
+                            </button>
+                          </>
                         )}
                         {booking.status === 'checked-in' && (
                           <button
