@@ -325,11 +325,11 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
                   </h3>
                   <div className="space-y-4">
                      {booking.roomIds.map(roomId => {
-                        let roomLabel = roomId; // Fallback
-                        const roomNum = parseInt(roomId.replace(/\D/g, ''));
-                        if (!isNaN(roomNum)) {
-                           roomLabel = roomNum <= 20 ? `ห้องเดี่ยว (Single) - 1 Bed, RM${roomNum}` : `ห้องคู่ (Double) - 2 Beds, RM${roomNum}`;
-                        }
+                        const room = allRooms.find(r => r.id === roomId);
+                        const labeled = labeledBookingRooms.find(r => r.id === roomId);
+                        const roomLabel = room
+                           ? `${room.type === 'double' ? 'ห้องคู่ (Double) - 2 Beds' : 'ห้องเดี่ยว (Single) - 1 Bed'} · ${labeled?.label ?? formatRoomName(room.number)}`
+                           : (labeled?.label ?? roomId);
 
                         return (
                            <div key={roomId} className="bg-white p-4 rounded-xl border border-slate-200">
