@@ -36,6 +36,17 @@ export function EditReceiptModal({ booking, payment, roomNumbers, currentUser, o
   const [newCharge, setNewCharge] = useState({ description: '', amount: '' });
   const [editReason, setEditReason] = useState('');
   const [processing, setProcessing] = useState(false);
+  // Editable payment date — default to the original paidAt
+  const [paidAt, setPaidAt] = useState<string>(() => {
+    try {
+      // datetime-local needs "YYYY-MM-DDTHH:mm" (no seconds, no timezone)
+      const d = new Date(payment.paidAt);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch {
+      return new Date().toISOString().slice(0, 16);
+    }
+  });
 
   const allCharges = useMemo<Charge[]>(() => {
     const charges: Charge[] = [...fixedCharges, ...editableCharges];
@@ -90,7 +101,7 @@ export function EditReceiptModal({ booking, payment, roomNumbers, currentUser, o
         method: paymentMethod,
         receiptNumber: payment.receiptNumber,
         invoiceNumber: payment.invoiceNumber,
-        paidAt: payment.paidAt,
+        paidAt: paidAt ? new Date(paidAt).toISOString() : payment.paidAt,
         paidBy: payment.paidBy,
         charges: allCharges,
         subtotal,
@@ -260,6 +271,20 @@ export function EditReceiptModal({ booking, payment, roomNumbers, currentUser, o
               </div>
             </div>
           )}
+
+          {/* Payment Date */}
+          <div>
+            <label className="block text-slate-700 font-bold mb-2">วันที่และเวลาชำระเงิน</label>
+            <input
+              type="datetime-local"
+              value={paidAt}
+              onChange={(e) => setPaidAt(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:border-orange-400 text-slate-800"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              เลขที่ใบเสร็จเดิม: {payment.receiptNumber} · วันที่บันทึกครั้งแรก: {new Date(payment.paidAt).toLocaleString('th-TH')}
+            </p>
+          </div>
 
           {/* Payment Method */}
           <div>
