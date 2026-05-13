@@ -345,17 +345,27 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
                                        <ArrowRightLeft className="w-4 h-4" />
                                        เปลี่ยนห้อง
                                     </button>
-                                    {booking.roomIds.length > 1 && (booking.status === 'reserved' || booking.status === 'checked-in') && (
-                                       <button
-                                          onClick={() => handleCancelSingleRoom(roomId)}
-                                          disabled={cancelling}
-                                          title="ยกเลิกเฉพาะห้องนี้ (เหลือห้องอื่นในการจองนี้)"
-                                          className="flex items-center gap-1 text-sm font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                       >
-                                          <MinusCircle className="w-4 h-4" />
-                                          ยกเลิกห้องนี้
-                                       </button>
-                                    )}
+                                    {(() => {
+                                       const canCancelPartial = booking.status === 'reserved' || booking.status === 'checked-in';
+                                       const isLastRoom = booking.roomIds.length <= 1;
+                                       const disabledHint = !canCancelPartial
+                                          ? 'การจองนี้ผ่านการ check-out/ยกเลิกไปแล้ว'
+                                          : isLastRoom
+                                             ? 'เหลือห้องสุดท้าย — ใช้ปุ่ม "ยกเลิกการจอง" ด้านล่าง'
+                                             : '';
+                                       const isDisabled = !canCancelPartial || isLastRoom || cancelling;
+                                       return (
+                                          <button
+                                             onClick={() => handleCancelSingleRoom(roomId)}
+                                             disabled={isDisabled}
+                                             title={disabledHint || 'ยกเลิกเฉพาะห้องนี้ (เหลือห้องอื่นในการจองนี้)'}
+                                             className="flex items-center gap-1 text-sm font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                          >
+                                             <MinusCircle className="w-4 h-4" />
+                                             ยกเลิกห้องนี้
+                                          </button>
+                                       );
+                                    })()}
                                  </div>
                               </div>
 
