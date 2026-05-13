@@ -96,6 +96,7 @@ function mapPaymentFromDB(row: any, charges: Charge[] = []): Payment {
     total: Number(row.total),
     ...(row.deposit != null && { deposit: Number(row.deposit) }),
     ...(row.balance_due != null && { balanceDue: Number(row.balance_due) }),
+    ...(row.notes != null && { notes: row.notes as string }),
   };
 }
 
@@ -777,6 +778,7 @@ export async function addPayment(payment: Payment): Promise<void> {
     // Don't specify paid_by unless it's a valid UUID
     ...(payment.deposit !== undefined && { deposit: payment.deposit }),
     ...(payment.balanceDue !== undefined && { balance_due: payment.balanceDue }),
+    ...(payment.notes !== undefined && { notes: payment.notes }),
   } as any);
 
   if (error) {

@@ -94,6 +94,12 @@ export function EditReceiptModal({ booking, payment, roomNumbers, currentUser, o
     try {
       await api.deletePayment(payment.id);
 
+      // Stamp the new audit entry on top of any prior notes
+      const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+      const actor = currentUser.name || currentUser.id;
+      const newEntry = `[${stamp} โดย ${actor}] ${editReason.trim()}`;
+      const mergedNotes = payment.notes ? `${payment.notes}\n${newEntry}` : newEntry;
+
       const updatedPayment: Payment = {
         id: `PAY${Date.now()}`,
         bookingId: payment.bookingId,
@@ -107,6 +113,7 @@ export function EditReceiptModal({ booking, payment, roomNumbers, currentUser, o
         subtotal,
         vat,
         total,
+        notes: mergedNotes,
       };
 
       await api.addPayment(updatedPayment);
@@ -341,6 +348,17 @@ export function EditReceiptModal({ booking, payment, roomNumbers, currentUser, o
               </table>
             </div>
           </div>
+
+          {/* Audit history — prior edit reasons */}
+          {payment.notes && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+              <h4 className="text-slate-700 font-bold mb-2 text-sm flex items-center gap-2">
+                <FileText className="w-4 h-4 text-slate-400" />
+                ประวัติการแก้ไข
+              </h4>
+              <pre className="whitespace-pre-wrap text-xs text-slate-600 font-mono leading-relaxed">{payment.notes}</pre>
+            </div>
+          )}
 
           {/* Edit Reason (Required for audit) */}
           <div className={!editReason.trim() ? 'ring-2 ring-red-200 rounded-2xl p-3 -m-3 bg-red-50/30' : ''}>
