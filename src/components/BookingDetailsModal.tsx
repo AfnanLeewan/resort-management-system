@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Booking, Charge, User, Room } from '../types';
 import * as api from '../utils/api';
-import { X, Save, Plus, Trash2, FileText, User as UserIcon, Phone, CreditCard, ShoppingBag, MapPin, Banknote, Loader2, MinusCircle } from 'lucide-react';
+import { X, Save, Plus, Trash2, FileText, User as UserIcon, Phone, CreditCard, ShoppingBag, MapPin, Banknote, Loader2, MinusCircle, ArrowRightLeft } from 'lucide-react';
 import { formatCurrency } from '../utils/dateHelpers';
 import { calculateNights } from '../utils/pricing';
 
