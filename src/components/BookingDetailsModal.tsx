@@ -45,6 +45,29 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
     );
   };
 
+  const handleCancelSingleRoom = async (roomId: string) => {
+    if (booking.roomIds.length <= 1) {
+      alert('นี่เป็นห้องสุดท้ายของการจอง — ใช้ปุ่ม "ยกเลิกการจอง" แทน');
+      return;
+    }
+    const label = labeledBookingRooms.find(r => r.id === roomId)?.label ?? `ห้อง ${roomId}`;
+    if (!confirm(`ยกเลิกเฉพาะ ${label}? การกระทำนี้ย้อนกลับไม่ได้`)) return;
+
+    setCancelling(true);
+    try {
+      await api.partialCancelRooms(booking.id, [roomId]);
+      alert(`✅ ยกเลิก ${label} เรียบร้อย`);
+      setSelectedRoomsToCancel(prev => prev.filter(id => id !== roomId));
+      onUpdate();
+      onClose();
+    } catch (err) {
+      console.error('Failed to cancel single room:', err);
+      alert('❌ ไม่สามารถยกเลิกห้องนี้ได้');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const handlePartialCancel = async () => {
     if (selectedRoomsToCancel.length === 0) return;
     if (selectedRoomsToCancel.length >= booking.roomIds.length) {
@@ -310,17 +333,30 @@ export function BookingDetailsModal({ booking, onClose, onUpdate, currentUser }:
 
                         return (
                            <div key={roomId} className="bg-white p-4 rounded-xl border border-slate-200">
-                              <div className="flex justify-between items-center mb-3 pb-3 border-b border-slate-100">
+                              <div className="flex justify-between items-center mb-3 pb-3 border-b border-slate-100 gap-2 flex-wrap">
                                  <span className="font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg">
                                     {roomLabel}
                                  </span>
-                                 <button
-                                    onClick={() => handleChangeRoomClick(roomId)}
-                                    className="flex items-center gap-1 text-sm font-bold text-cyan-600 hover:text-cyan-700 bg-cyan-50 hover:bg-cyan-100 px-3 py-1.5 rounded-lg transition-colors"
-                                 >
-                                    <ArrowRightLeft className="w-4 h-4" />
-                                    เปลี่ยนห้อง (Change)
-                                 </button>
+                                 <div className="flex gap-2 items-center">
+                                    <button
+                                       onClick={() => handleChangeRoomClick(roomId)}
+                                       className="flex items-center gap-1 text-sm font-bold text-cyan-600 hover:text-cyan-700 bg-cyan-50 hover:bg-cyan-100 px-3 py-1.5 rounded-lg transition-colors"
+                                    >
+                                       <ArrowRightLeft className="w-4 h-4" />
+                                       เปลี่ยนห้อง
+                                    </button>
+                                    {booking.roomIds.length > 1 && (booking.status === 'reserved' || booking.status === 'checked-in') && (
+                                       <button
+                                          onClick={() => handleCancelSingleRoom(roomId)}
+                                          disabled={cancelling}
+                                          title="ยกเลิกเฉพาะห้องนี้ (เหลือห้องอื่นในการจองนี้)"
+                                          className="flex items-center gap-1 text-sm font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                       >
+                                          <MinusCircle className="w-4 h-4" />
+                                          ยกเลิกห้องนี้
+                                       </button>
+                                    )}
+                                 </div>
                               </div>
 
                               <div className="grid grid-cols-2 gap-3 pl-2 border-l-2 border-cyan-100">
