@@ -343,21 +343,31 @@ export function EditReceiptModal({ booking, payment, roomNumbers, currentUser, o
           </div>
 
           {/* Edit Reason (Required for audit) */}
-          <div>
+          <div className={!editReason.trim() ? 'ring-2 ring-red-200 rounded-2xl p-3 -m-3 bg-red-50/30' : ''}>
             <label className="block text-slate-700 font-bold mb-2">
               เหตุผลในการแก้ไขใบเสร็จ <span className="text-red-500">*</span>
+              {!editReason.trim() && (
+                <span className="ml-2 text-red-500 text-xs font-normal">— จำเป็นต้องระบุก่อนบันทึก</span>
+              )}
             </label>
             <textarea
               value={editReason}
               onChange={(e) => setEditReason(e.target.value)}
               rows={2}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:border-orange-400 text-slate-800 resize-none"
+              required
+              className={`w-full px-4 py-3 border rounded-xl outline-none focus:border-orange-400 text-slate-800 resize-none ${!editReason.trim() ? 'border-red-300 bg-white' : 'border-slate-200'}`}
               placeholder="เช่น แก้ไขวิธีการชำระเงิน, เพิ่มค่าบริการที่ตกหล่น, แก้ไขส่วนลด..."
             />
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-4 pt-4 border-t border-slate-100">
+          <div className="flex flex-col gap-2 pt-4 border-t border-slate-100">
+            {!editReason.trim() && (
+              <p className="text-sm text-red-600 text-center">
+                ⚠️ กรุณากรอก "เหตุผลในการแก้ไขใบเสร็จ" ด้านบนก่อนกดบันทึก
+              </p>
+            )}
+          <div className="flex gap-4">
             <button
               onClick={handleSave}
               disabled={processing || !editReason.trim()}
@@ -381,6 +391,7 @@ export function EditReceiptModal({ booking, payment, roomNumbers, currentUser, o
             >
               ยกเลิก
             </button>
+            </div>
           </div>
         </div>
       </div>
