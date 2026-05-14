@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Room, User, Booking, Payment } from '../types';
+import { Room, User, Booking, Payment, Charge } from '../types';
 import * as api from '../utils/api';
 import * as lineService from '../utils/lineService';
 import { extractBasePrice, extractVAT } from '../utils/pricing';
@@ -922,12 +922,21 @@ function StatCard({ label, value, icon: Icon, color, subtext }: any) {
 function PoolServiceModal({ onClose, onSuccess, currentUser }: any) {
   const [guestName, setGuestName] = useState('');
   const [count, setCount] = useState(1);
+  const [discount, setDiscount] = useState(0);
+  const [discountReason, setDiscountReason] = useState('');
   const pricePerPerson = 50;
-  const total = count * pricePerPerson;
+  const baseTotal = count * pricePerPerson;
+  const canApplyDiscount = currentUser?.role === 'management' || currentUser?.role === 'board';
+  const effectiveDiscount = canApplyDiscount ? Math.min(Math.max(0, discount), baseTotal) : 0;
+  const total = baseTotal - effectiveDiscount;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestName) return;
+    if (effectiveDiscount > 0 && !discountReason.trim()) {
+      alert('กรุณาระบุเหตุผลในการให้ส่วนลด');
+      return;
+    }
 
     try {
       // 1. Create a "Service Booking" to track the transaction context
@@ -943,7 +952,7 @@ function PoolServiceModal({ onClose, onSuccess, currentUser }: any) {
         source: 'walk-in',
         status: 'checked-out', // Service completed immediately upon payment
         groupName: count > 1 ? `Pool Group (${count})` : undefined,
-        notes: `Pool Service: ${count} person(s)`,
+        notes: `Pool Service: ${count} person(s)${effectiveDiscount > 0 ? ` · Discount ${effectiveDiscount} (${discountReason})` : ''}`,
         createdAt: new Date().toISOString(),
         createdBy: currentUser?.id || 'system'
       };
@@ -957,6 +966,26 @@ function PoolServiceModal({ onClose, onSuccess, currentUser }: any) {
         api.getNextInvoiceNumber(),
       ]);
 
+      const charges: Charge[] = [
+        {
+          id: `CHG-${Date.now()}`,
+          bookingId: realBookingId,
+          type: 'other',
+          description: `ค่าบริการสระว่ายน้ำ (Swimming Pool) x${count}`,
+          amount: baseTotal,
+        }
+      ];
+      if (effectiveDiscount > 0) {
+        charges.push({
+          id: `CHG-DISCOUNT-${Date.now()}`,
+          bookingId: realBookingId,
+          type: 'discount',
+          description: `ส่วนลด: ${discountReason.trim()}`,
+          amount: -effectiveDiscount,
+          authorizedBy: currentUser?.id,
+        });
+      }
+
       const payment: Payment = {
         id: `PAY-${Date.now()}`,
         bookingId: realBookingId, // Use real UUID
@@ -966,15 +995,7 @@ function PoolServiceModal({ onClose, onSuccess, currentUser }: any) {
         invoiceNumber,
         paidAt: new Date().toISOString(),
         paidBy: currentUser?.name || 'Staff',
-        charges: [
-          {
-            id: `CHG-${Date.now()}`,
-            bookingId: realBookingId, // Use real UUID
-            type: 'other',
-            description: `ค่าบริการสระว่ายน้ำ (Swimming Pool) x${count}`,
-            amount: total,
-          }
-        ],
+        charges,
         subtotal: extractBasePrice(total),
         vat: extractVAT(total),
         total: total
@@ -1043,11 +1064,58 @@ function PoolServiceModal({ onClose, onSuccess, currentUser }: any) {
             </div>
           </div>
 
+          {canApplyDiscount && (
+            <div className="bg-yellow-50/60 p-4 rounded-xl border border-yellow-200">
+              <h4 className="text-yellow-800 font-bold mb-3 flex items-center gap-2 text-sm">
+                🔐 ส่วนลดพิเศษ (สำหรับ {currentUser?.role === 'board' ? 'board' : 'management'})
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-yellow-800 text-[10px] font-bold uppercase tracking-wider mb-1">
+                    จำนวนเงิน (บาท)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={baseTotal}
+                    value={discount === 0 ? '' : discount}
+                    onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                    className="w-full p-2 border border-yellow-200 rounded-lg focus:border-yellow-500 outline-none bg-white text-yellow-900 font-bold text-sm"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-yellow-800 text-[10px] font-bold uppercase tracking-wider mb-1">เหตุผล</label>
+                  <input
+                    type="text"
+                    value={discountReason}
+                    onChange={(e) => setDiscountReason(e.target.value)}
+                    className="w-full p-2 border border-yellow-200 rounded-lg focus:border-yellow-500 outline-none bg-white text-yellow-900 text-sm"
+                    placeholder="เช่น ลูกค้าประจำ"
+                  />
+                </div>
+              </div>
+              {discount > baseTotal && (
+                <p className="text-xs text-red-600 mt-2">⚠️ ส่วนลดเกินยอด — จะหักได้สูงสุด {formatCurrency(baseTotal)}</p>
+              )}
+            </div>
+          )}
+
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
             <div className="flex justify-between text-slate-500 text-sm">
               <span>ราคาต่อท่าน</span>
               <span>{pricePerPerson} บาท</span>
             </div>
+            <div className="flex justify-between text-slate-500 text-sm">
+              <span>ยอดก่อนส่วนลด ({count} ท่าน)</span>
+              <span>{formatCurrency(baseTotal)}</span>
+            </div>
+            {effectiveDiscount > 0 && (
+              <div className="flex justify-between text-yellow-700 text-sm font-bold">
+                <span>ส่วนลด</span>
+                <span>−{formatCurrency(effectiveDiscount)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-slate-800 font-bold text-lg pt-2 border-t border-slate-200">
               <span>ยอดรวมสุทธิ</span>
               <span className="text-cyan-600">{formatCurrency(total)}</span>
