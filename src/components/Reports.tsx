@@ -3,7 +3,7 @@ import { User, Booking, Payment, Room } from '../types';
 import * as api from '../utils/api';
 import { formatCurrency, formatDateTime } from '../utils/dateHelpers';
 import { formatRoomName } from '../utils/roomHelpers';
-import { Download, FileText, DollarSign, TrendingUp, Calendar, Printer, CreditCard, Banknote, Smartphone, Building, Info, Loader2, Trash2, CheckSquare, Square } from 'lucide-react';
+import { Download, FileText, DollarSign, TrendingUp, Calendar, Printer, CreditCard, Banknote, Smartphone, Building, Info, Loader2, Trash2, CheckSquare, Square, PieChart } from 'lucide-react';
 
 interface ReportsProps {
   currentUser: User;
@@ -82,9 +82,14 @@ export function Reports({ currentUser }: ReportsProps) {
 
     // Room nights sold
     const roomNights = monthPayments.reduce((sum, p) => {
-      const roomCharges = p.charges.filter(c => c.type === 'room');
+      const roomCharges = (p.charges ?? []).filter(c => c.type === 'room');
       return sum + roomCharges.length;
     }, 0);
+
+    const sampakornRevenue = totalRevenue * 0.55;
+    const paoRevenue = totalRevenue * 0.11;
+    const sampakornRoomNights = Math.round(roomNights * 0.55);
+    const paoRoomNights = Math.round(roomNights * 0.11);
 
     return {
       totalRevenue,
@@ -98,6 +103,10 @@ export function Reports({ currentUser }: ReportsProps) {
       tourRevenue,
       vipRevenue,
       roomNights,
+      sampakornRevenue,
+      paoRevenue,
+      sampakornRoomNights,
+      paoRoomNights,
     };
   }, [monthPayments, bookings]);
 
@@ -126,7 +135,7 @@ export function Reports({ currentUser }: ReportsProps) {
     window.print();
   };
 
-  const handleDeletePayment = async (paymentId: string, receiptNumber: string) => {
+  const handleDeletePayment = async (paymentId: string, bookingId: string, receiptNumber: string) => {
     if (!confirm(`คุณต้องการลบรายการ ${receiptNumber} หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
       return;
     }
@@ -134,8 +143,13 @@ export function Reports({ currentUser }: ReportsProps) {
     setDeleting(paymentId);
     try {
       await api.deletePayment(paymentId);
+      await api.deleteBooking(bookingId);
       // Refresh payments list
-      const updatedPayments = await api.getPayments();
+      const [updatedBookings, updatedPayments] = await Promise.all([
+        api.getBookings(),
+        api.getPayments(),
+      ]);
+      setBookings(updatedBookings);
       setPayments(updatedPayments);
 
       // Remove from selection if deleted
@@ -145,8 +159,8 @@ export function Reports({ currentUser }: ReportsProps) {
         setSelectedIds(newSelected);
       }
     } catch (err) {
-      console.error('Failed to delete payment:', err);
-      alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment');
+      console.error('Failed to delete payment/booking:', err);
+      alert('❌ ไม่สามารถลบรายการได้ / Failed to delete payment or booking');
     } finally {
       setDeleting(null);
     }
@@ -175,26 +189,42 @@ export function Reports({ currentUser }: ReportsProps) {
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
 
-    if (!confirm(`คุณต้องการลบรายการที่เลือก ${selectedIds.size} รายการ หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
+    if (!confirm(`คุณต้องการลบรายการที่เลือก ${selectedIds.size} รายการ หรือไม่?\n\nการดำเนินการนี้จะลบทั้งใบเสร็จและการจองที่เกี่ยวข้อง — ย้อนกลับไม่ได้`)) {
       return;
     }
 
+    // Collect bookingId per selected paymentId BEFORE deleting payments
+    const selectedPayments = payments.filter(p => selectedIds.has(p.id));
+    const bookingIds = Array.from(new Set(
+      selectedPayments.map(p => p.bookingId).filter((id): id is string => Boolean(id))
+    ));
+
     setIsDeletingMulti(true);
     try {
-      // Delete all selected payments in parallel
+      // 1) Delete payments first (FK constraint allows this)
       await Promise.all(Array.from(selectedIds).map(id => api.deletePayment(id)));
+      // 2) Delete linked bookings (also clears booking_rooms + charges via cascade)
+      await Promise.all(bookingIds.map(id => api.deleteBooking(id)));
 
-      // Refresh payments list
-      const updatedPayments = await api.getPayments();
+      // Refresh everything that depends on bookings/payments
+      const [updatedBookings, updatedPayments] = await Promise.all([
+        api.getBookings(),
+        api.getPayments(),
+      ]);
+      setBookings(updatedBookings);
       setPayments(updatedPayments);
 
       // Clear selection
       setSelectedIds(new Set());
     } catch (err) {
-      console.error('Failed to delete selected payments:', err);
+      console.error('Failed to delete selected payments/bookings:', err);
       alert('❌ เกิดข้อผิดพลาดในการลบรายการบางรายการ / Some payments could not be deleted');
       // Refresh anyway to show current state
-      const updatedPayments = await api.getPayments();
+      const [updatedBookings, updatedPayments] = await Promise.all([
+        api.getBookings(),
+        api.getPayments(),
+      ]);
+      setBookings(updatedBookings);
       setPayments(updatedPayments);
     } finally {
       setIsDeletingMulti(false);
@@ -363,6 +393,82 @@ export function Reports({ currentUser }: ReportsProps) {
         </div>
       </div>
 
+      {/* Room Rate Allocation Breakdown — Board Only */}
+      {currentUser.role === 'board' && (
+        <div className="bg-white rounded-3xl p-8 border-2 border-amber-200 shadow-sm">
+          <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
+            <PieChart className="w-6 h-6 text-amber-500" />
+            สัดส่วนยอดห้องพัก
+            <span className="ml-2 text-xs font-medium bg-amber-100 text-amber-700 px-2 py-1 rounded-full">บอร์ดบริหารเท่านั้น</span>
+          </h3>
+          <p className="text-sm text-slate-400 mb-6">Room Rate Allocation Breakdown</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Sampakorn 55% */}
+            <div className="rounded-2xl bg-blue-50 border border-blue-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                    <Building className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-800">ส่งสัมพากร</div>
+                    <div className="text-xs text-slate-400">Sampakorn Allocation</div>
+                  </div>
+                </div>
+                <span className="text-2xl font-extrabold text-blue-600">55%</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center py-2 border-b border-blue-100">
+                  <span className="text-sm text-slate-500">ยอดเงิน (Revenue)</span>
+                  <span className="font-bold text-blue-700">{formatCurrency(stats.sampakornRevenue)}</span>
+                </div>
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-sm text-slate-500">จำนวนห้อง (Room Nights)</span>
+                  <span className="font-bold text-blue-700">{stats.sampakornRoomNights} ห้อง-คืน</span>
+                </div>
+              </div>
+            </div>
+
+            {/* PAO (อบจ.) 11% */}
+            <div className="rounded-2xl bg-green-50 border border-green-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                    <Building className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-800">ส่ง อบจ.</div>
+                    <div className="text-xs text-slate-400">PAO Allocation</div>
+                  </div>
+                </div>
+                <span className="text-2xl font-extrabold text-green-600">11%</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center py-2 border-b border-green-100">
+                  <span className="text-sm text-slate-500">ยอดเงิน (Revenue)</span>
+                  <span className="font-bold text-green-700">{formatCurrency(stats.paoRevenue)}</span>
+                </div>
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-sm text-slate-500">จำนวนห้อง (Room Nights)</span>
+                  <span className="font-bold text-green-700">{stats.paoRoomNights} ห้อง-คืน</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Summary bar */}
+          <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-100 text-sm text-slate-500 flex items-start gap-2">
+            <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+            <span>
+              คำนวณจากรายได้รวมของเดือนนี้ ({formatCurrency(stats.totalRevenue)}) —
+              สัมพากร {formatCurrency(stats.sampakornRevenue)} | อบจ. {formatCurrency(stats.paoRevenue)} |
+              รวม {formatCurrency(stats.sampakornRevenue + stats.paoRevenue)} ({((0.55 + 0.11) * 100).toFixed(0)}% ของยอดรวม)
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Transaction Table */}
       <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="px-8 py-6 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
@@ -445,7 +551,7 @@ export function Reports({ currentUser }: ReportsProps) {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
-                        onClick={() => handleDeletePayment(payment.id, payment.receiptNumber)}
+                        onClick={() => handleDeletePayment(payment.id, payment.bookingId, payment.receiptNumber)}
                         disabled={deleting === payment.id || isDeletingMulti}
                         className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
                         title="ลบรายการ"

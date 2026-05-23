@@ -37,6 +37,7 @@ export interface Booking {
   status: 'reserved' | 'checked-in' | 'checked-out' | 'cancelled';
   groupName?: string; // For tour groups
   notes?: string;
+  roomGuests?: Record<string, Partial<Guest>>; // Add per-room guest details map, keyed by Room ID
   additionalCharges?: Charge[];
   createdAt: string;
   createdBy: string;
@@ -64,6 +65,9 @@ export interface Payment {
   subtotal: number;
   vat: number;
   total: number;
+  deposit?: number;    // Advance payment collected at booking time
+  balanceDue?: number; // Amount to collect at checkout (total - deposit)
+  notes?: string;      // Free-form audit note (e.g. edit reason, late-payment context)
 }
 
 export interface MaintenanceReport {
@@ -90,6 +94,7 @@ export interface User {
   username: string;
   name: string;
   role: UserRole;
+  password?: string;
   phone?: string;
   photoUrl?: string;
   status: 'on-duty' | 'off-duty' | 'on-leave';

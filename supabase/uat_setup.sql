@@ -27,7 +27,7 @@ CREATE TYPE user_status AS ENUM ('on-duty', 'off-duty', 'on-leave');
 CREATE TYPE booking_status AS ENUM ('reserved', 'checked-in', 'checked-out', 'cancelled');
 CREATE TYPE charge_type AS ENUM ('room', 'early-checkin', 'late-checkout', 'discount', 'other');
 CREATE TYPE maintenance_priority AS ENUM ('low', 'medium', 'high');
-CREATE TYPE maintenance_status AS ENUM ('pending', 'in-progress', 'resolved');
+CREATE TYPE maintenance_status AS ENUM ('pending', 'in-progress', 'completed', 'resolved');
 CREATE TYPE attendance_type AS ENUM ('check-in', 'check-out', 'leave');
 CREATE TYPE transaction_type AS ENUM ('in', 'out');
 
@@ -116,6 +116,8 @@ CREATE TABLE payments (
     subtotal DECIMAL(10, 2) NOT NULL,
     vat DECIMAL(10, 2) NOT NULL,
     total DECIMAL(10, 2) NOT NULL,
+    deposit DECIMAL(10, 2),
+    balance_due DECIMAL(10, 2),
     paid_at TIMESTAMPTZ DEFAULT NOW(),
     paid_by UUID REFERENCES users(id)
 );
@@ -406,23 +408,30 @@ ALTER TABLE line_cleaning_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE line_registration_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE line_bot_config ENABLE ROW LEVEL SECURITY;
 
--- Allow all operations (simplified policies)
-CREATE POLICY "Allow all for authenticated users" ON users FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON rooms FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON bookings FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON booking_rooms FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON charges FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON payments FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON maintenance_reports FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON attendance_records FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON inventory_items FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON inventory_transactions FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON counters FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON staff_line_mapping FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON line_notifications FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON line_cleaning_tasks FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON line_registration_codes FOR ALL USING (true);
-CREATE POLICY "Allow all for authenticated users" ON line_bot_config FOR ALL USING (true);
+-- Allow all operations (simplified policies) for anon and authenticated roles
+CREATE POLICY "Allow all for anon and authenticated" ON users FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON rooms FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON bookings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON booking_rooms FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON charges FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON payments FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON maintenance_reports FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON attendance_records FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON inventory_items FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON inventory_transactions FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON counters FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON staff_line_mapping FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON line_notifications FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON line_cleaning_tasks FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON line_registration_codes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon and authenticated" ON line_bot_config FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- Grant table privileges to anon and authenticated roles
+-- Required for PostgREST to allow INSERT/UPDATE/DELETE via the anon key
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 
 -- =====================================================
 -- PART 9: SEED DATA

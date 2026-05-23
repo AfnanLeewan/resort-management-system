@@ -23,3 +23,5 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+# Local cloud env backups (per-machine, do not commit)
+*.cloud.bak
