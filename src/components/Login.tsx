@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { User } from '../types';
 import * as api from '../utils/api';
-import { seedDemoData, hasDemoData } from '../utils/seedData';
 import { LogIn, User as UserIcon, Lock, Loader2 } from 'lucide-react';
 import logo from "../assets/Royyan_logo.JPG";
 
@@ -14,7 +13,6 @@ export function Login({ onLogin }: LoginProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
-  const hasDemo = hasDemoData();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,14 +32,6 @@ export function Login({ onLogin }: LoginProps) {
       setError('เกิดข้อผิดพลาด / Error occurred');
     } finally {
       setLoggingIn(false);
-    }
-  };
-
-  const handleLoadDemoData = () => {
-    if (confirm('โหลดข้อมูลทดสอบ? (Load demo data for testing?)')) {
-      seedDemoData();
-      alert('✅ โหลดข้อมูลทดสอบเรียบร้อย!\n\nDemo data loaded:\n- 2 bookings\n- 1 maintenance report');
-      window.location.reload();
     }
   };
 
@@ -131,17 +121,6 @@ export function Login({ onLogin }: LoginProps) {
             )}
           </button>
         </form>
-
-        {!hasDemo && (
-          <div className="mt-6">
-            <button
-              onClick={handleLoadDemoData}
-              className="w-full bg-white hover:bg-slate-50 border-2 border-dashed border-slate-300 text-slate-500 hover:text-slate-700 py-3 rounded-xl transition-colors text-sm font-bold"
-            >
-              โหลดข้อมูลตัวอย่าง
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
