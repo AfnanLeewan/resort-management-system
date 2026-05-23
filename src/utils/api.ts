@@ -199,6 +199,30 @@ export async function getUserByUsername(username: string): Promise<User | null> 
   return mapUserFromDB(data);
 }
 
+// Authenticate by username + password. Plaintext match (this app has no auth
+// framework; the session is kept in localStorage). Returns the user on success,
+// null on bad credentials.
+export async function login(username: string, password: string): Promise<User | null> {
+  if (isInDemoMode || !supabase) {
+    const users = localStorage.getUsers();
+    return users.find(u => u.username === username && (u as any).password === password) || null;
+  }
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('username', username)
+    .eq('password', password)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error during login:', error);
+    return null;
+  }
+
+  return data ? mapUserFromDB(data) : null;
+}
+
 export async function addUser(user: User): Promise<void> {
   if (isInDemoMode || !supabase) {
     localStorage.addUser(user);
