@@ -48,7 +48,7 @@ import { format, addDays, isSameDay, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { cn } from './ui/utils';
 import { buttonVariants } from './ui/button';
-import logo from "figma:asset/84dd509e490bb18f47d2514ab68671ebde53721b.png";
+import logo from "../assets/Royyan_logo.JPG";
 
 interface RoomGridProps {
   currentUser?: User;
@@ -748,10 +748,10 @@ export function RoomGrid({ currentUser, onRoomSelect }: RoomGridProps) {
                   </div>
                 ) : (
                   // EMPTY STATE
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center opacity-40 hover:opacity-50 transition-opacity">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                     <img
                       src={logo}
-                      className="w-48 h-48 object-contain mx-auto mb-6 grayscale opacity-50"
+                      className="w-48 h-48 object-contain mx-auto mb-6 opacity-30"
                       alt="Watermark"
                     />
                     <h3 className="text-2xl font-bold text-slate-800 mb-2">เลือกห้องพัก</h3>
