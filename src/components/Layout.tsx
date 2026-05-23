@@ -15,7 +15,8 @@ import {
   Menu,
   ChevronRight,
   Package,
-  Settings
+  Settings,
+  UserCog
 } from 'lucide-react';
 import { QuickGuide } from './QuickGuide';
 import logo from "../assets/Royyan_logo.JPG";
@@ -43,6 +44,7 @@ export function Layout({ children, currentUser, currentView, onViewChange, onLog
     { id: 'line-settings', label: 'ตั้งค่า LINE', icon: MessageSquare, roles: ['management'] },
     { id: 'inventory', label: 'คลังพัสดุ', icon: Package, roles: ['management', 'housekeeping', 'front-desk'] },
     { id: 'reports', label: 'รายงาน', icon: BarChart3, roles: ['management', 'board'] },
+    { id: 'user-management', label: 'จัดการผู้ใช้', icon: UserCog, roles: ['management'] },
   ];
 
   const visibleMenuItems = menuItems.filter(item => item.roles.includes(currentUser.role));

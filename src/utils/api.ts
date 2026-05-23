@@ -234,6 +234,7 @@ export async function addUser(user: User): Promise<void> {
     username: user.username,
     name: user.name,
     role: user.role,
+    password: user.password || user.username,
     phone: user.phone || null,
     photo_url: user.photoUrl || null,
     status: user.status,
@@ -257,6 +258,7 @@ export async function updateUser(id: string, updates: Partial<User>): Promise<vo
   if (updates.username !== undefined) dbUpdates.username = updates.username;
   if (updates.name !== undefined) dbUpdates.name = updates.name;
   if (updates.role !== undefined) dbUpdates.role = updates.role;
+  if (updates.password !== undefined) dbUpdates.password = updates.password;
   if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
   if (updates.photoUrl !== undefined) dbUpdates.photo_url = updates.photoUrl;
   if (updates.status !== undefined) dbUpdates.status = updates.status;

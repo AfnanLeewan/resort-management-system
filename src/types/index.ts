@@ -94,6 +94,7 @@ export interface User {
   username: string;
   name: string;
   role: UserRole;
+  password?: string;
   phone?: string;
   photoUrl?: string;
   status: 'on-duty' | 'off-duty' | 'on-leave';

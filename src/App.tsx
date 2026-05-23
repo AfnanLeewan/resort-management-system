@@ -14,6 +14,7 @@ import { Reports } from './components/Reports';
 import { Inventory } from './components/Inventory';
 import { StaffDashboard } from './components/StaffDashboard';
 import { RoomManagement } from './components/RoomManagement';
+import { UserManagement } from './components/UserManagement';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -103,6 +104,7 @@ export default function App() {
       {currentView === 'inventory' && <Inventory currentUser={currentUser} />}
       {currentView === 'reports' && <Reports currentUser={currentUser} />}
       {currentView === 'room-management' && <RoomManagement currentUser={currentUser} />}
+      {currentView === 'user-management' && <UserManagement currentUser={currentUser} />}
     </Layout>
   );
 }
